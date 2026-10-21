@@ -82,6 +82,28 @@ public static class Look
         var m => m.Length > 5 ? m[..5] : m,
     };
 
+    /// <summary>
+    /// The tag of a request in the tree and the tabs: its API style when it has one ("GQL" says more than "POST",
+    /// since every GraphQL operation is a POST), else its method.
+    /// </summary>
+    public static string Tag(string method, Core.Model.ApiKind kind) => Core.Model.ApiKinds.Tag(kind) ?? MethodTag(method);
+
+    public static IBrush TagBrush(string method, Core.Model.ApiKind kind) => kind switch
+    {
+        Core.Model.ApiKind.GraphQL => Palette.Pink,
+        Core.Model.ApiKind.JsonRpc => Palette.Olive,
+        Core.Model.ApiKind.Soap => Palette.Teal,
+        _ => Method(method),
+    };
+
+    public static IBrush Insight(Core.Http.InsightLevel level) => level switch
+    {
+        Core.Http.InsightLevel.Ok => Palette.Green,
+        Core.Http.InsightLevel.Warning => Palette.Amber,
+        Core.Http.InsightLevel.Error => Palette.Red,
+        _ => Palette.Dim,
+    };
+
     public static IBrush StatusBadge(int status, bool error) => error ? Palette.ServerErrorBadge : status switch
     {
         < 300 => Palette.OkBadge,

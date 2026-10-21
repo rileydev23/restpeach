@@ -68,7 +68,7 @@ public sealed class Runner
         PreparedRequest prepared;
         try { prepared = Prepare(_ws, _config, Workspace.ParentOf(relPath), req, _env, Runtime); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return new RunResult(relPath, req, null, null, Array.Empty<AssertionResult>(), e.Message); }
-        var response = await _engine.SendAsync(prepared, HttpOptions.From(_config), ct);
+        var response = await _engine.SendAsync(prepared, HttpOptions.For(_config, req), ct);
         var assertions = response.Error is null ? Assertions.Evaluate(req.Tests, response, Runtime) : new List<AssertionResult>();
         return new RunResult(relPath, req, prepared, response, assertions, null);
     }

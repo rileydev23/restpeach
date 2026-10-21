@@ -20,6 +20,7 @@
               <MenuFlyout Placement="BottomEdgeAlignedRight">
                 <MenuItem Header="{l:L rv.copyCurl}" Command="{Binding CopyCurlCommand}" InputGesture="Ctrl+Shift+C" />
                 <MenuItem Header="{l:L rv.reveal}" Command="{Binding RevealInTreeCommand}" />
+                <MenuItem Header="{l:L rv.noRedirects}" ToggleType="CheckBox" IsChecked="{Binding NoRedirects}" />
                 <MenuItem Header="{l:L peach.openTextPeach}" Command="{Binding OpenInTextPeachCommand}" />
                 <Separator />
                 <MenuItem Header="{l:L rv.reloadDisk}" Command="{Binding ReloadFromDiskCommand}" />
@@ -29,6 +30,11 @@
         </StackPanel>
         <ComboBox DockPanel.Dock="Left" Classes="method" ItemsSource="{Binding Methods}" SelectedItem="{Binding Method}"
                   Foreground="{Binding MethodBrush}" Margin="0,0,6,0" ToolTip.Tip="{l:L rv.method.tip}" />
+        <!-- The API style: what the request really is, beyond its HTTP method -->
+        <Border DockPanel.Dock="Left" IsVisible="{Binding HasKind}" BorderBrush="{Binding KindBrush}" BorderThickness="1" CornerRadius="3"
+                Padding="8,0" Margin="0,0,6,0" Background="Transparent" ToolTip.Tip="{Binding KindTip}">
+          <TextBlock Text="{Binding KindName}" Foreground="{Binding KindBrush}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+        </Border>
         <TextBox x:Name="UrlBox" Classes="mono" Text="{Binding Url}" Watermark="{l:L rv.url.watermark}" VerticalContentAlignment="Center"
                  MinHeight="30" FontSize="13" ToolTip.Tip="{l:L rv.url.tip}" />
       </DockPanel>
@@ -101,24 +107,42 @@
             <Border DockPanel.Dock="Top" Padding="10,6">
               <DockPanel>
                 <Button DockPanel.Dock="Right" Classes="flat" Content="{l:L rv.format}" Command="{Binding FormatBodyCommand}" Foreground="#8a8d93"
-                        IsVisible="{Binding IsRawBody}" ToolTip.Tip="{l:L rv.format.tip}" />
+                        IsVisible="{Binding IsEditorBody}" ToolTip.Tip="{l:L rv.format.tip}" />
                 <StackPanel Orientation="Horizontal" Spacing="10">
                   <TextBlock Text="{l:L rv.bodyType}" Classes="dim" VerticalAlignment="Center" />
                   <ComboBox ItemsSource="{Binding BodyTypes}" SelectedItem="{Binding BodyType}" MinWidth="190" />
                 </StackPanel>
               </DockPanel>
             </Border>
-            <Panel>
-              <ae:TextEditor x:Name="BodyEditor" IsVisible="{Binding IsRawBody}" ShowLineNumbers="True"
-                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
-              <ScrollViewer IsVisible="{Binding IsFormBody}" Padding="10,2,10,8">
-                <StackPanel Spacing="6">
-                  <views:KeyValueEditor DataContext="{Binding BodyFields}" />
-                  <TextBlock Classes="dim" FontSize="11" Text="{l:L rv.form.hint}" TextWrapping="Wrap" />
-                </StackPanel>
-              </ScrollViewer>
-              <TextBlock IsVisible="{Binding IsNoBody}" Classes="dim" FontStyle="Italic" Text="{l:L rv.noBody}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Panel>
+            <!-- Raw and form bodies fill the area; GraphQL splits it: the query (BodyEditor) above, its variables
+                 below. The view sets the height of the variables row (0 when the body is not GraphQL). -->
+            <Grid x:Name="BodyGrid" RowDefinitions="Auto,3*,Auto,0">
+              <Border Padding="10,0,10,2" IsVisible="{Binding IsGraphQLBody}">
+                <TextBlock Text="{l:L rv.gql.query}" Classes="dim" FontSize="11" />
+              </Border>
+              <Panel Grid.Row="1">
+                <ae:TextEditor x:Name="BodyEditor" IsVisible="{Binding IsEditorBody}" ShowLineNumbers="True"
+                               HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
+                <ScrollViewer IsVisible="{Binding IsFormBody}" Padding="10,2,10,8">
+                  <StackPanel Spacing="6">
+                    <views:KeyValueEditor DataContext="{Binding BodyFields}" />
+                    <TextBlock Classes="dim" FontSize="11" Text="{l:L rv.form.hint}" TextWrapping="Wrap" />
+                  </StackPanel>
+                </ScrollViewer>
+                <TextBlock IsVisible="{Binding IsNoBody}" Classes="dim" FontStyle="Italic" Text="{l:L rv.noBody}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Panel>
+              <GridSplitter Grid.Row="2" ResizeDirection="Rows" Height="4" IsVisible="{Binding IsGraphQLBody}" />
+              <DockPanel Grid.Row="3" IsVisible="{Binding IsGraphQLBody}">
+                <Border DockPanel.Dock="Top" BorderBrush="#3a3c42" BorderThickness="0,1,0,0" Padding="10,4">
+                  <DockPanel>
+                    <TextBlock Text="{l:L rv.gql.variables}" Classes="dim" FontSize="11" Margin="0,0,12,0" />
+                    <TextBlock Text="{l:L rv.gql.hint}" Classes="dim" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:L kind.graphql.tip}" />
+                  </DockPanel>
+                </Border>
+                <ae:TextEditor x:Name="VariablesEditor" ShowLineNumbers="True"
+                               HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
+              </DockPanel>
+            </Grid>
           </DockPanel>
           <DockPanel IsVisible="{Binding IsTestsSection}">
             <SelectableTextBlock DockPanel.Dock="Top" Margin="12,8,12,6" Foreground="#8a8d93" FontSize="11" TextWrapping="Wrap" Text="{l:L rv.tests.hint}" />
@@ -164,6 +188,17 @@
           </StackPanel>
         </Border>
 
+        <!-- What the response means for its API style (a GraphQL error with a 200, a SOAP Fault, a cut stream) -->
+        <Border DockPanel.Dock="Top" Background="#1e1f22" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" Padding="12,4"
+                IsVisible="{Binding HasResponse}">
+          <ItemsControl ItemsSource="{Binding Insights}" IsVisible="{Binding HasInsights}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:InsightRow">
+                <SelectableTextBlock Text="{Binding Text}" Foreground="{Binding Brush}" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" Margin="0,1" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Border>
         <Panel Background="#1b1c1f">
           <StackPanel IsVisible="{Binding !HasResponse}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="4" IsHitTestVisible="False">
             <TextBlock Classes="dim" Text="{l:L rv.noResponse}" HorizontalAlignment="Center" />

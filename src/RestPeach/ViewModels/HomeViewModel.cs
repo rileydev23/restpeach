@@ -56,8 +56,9 @@ public partial class HomeViewModel : TabViewModel
         bool headers = State.Groups.Count > 0;
         foreach (var section in sections)
         {
-            // While filtering every section is expanded, so matches are never hidden.
-            bool collapsed = !filtering && (section.Group?.Collapsed ?? State.UngroupedCollapsed);
+            // While filtering every section is expanded, so matches are never hidden. Without headers there is
+            // nothing to click to expand again, so a collapsed flag left over from when groups existed is ignored.
+            bool collapsed = headers && !filtering && (section.Group?.Collapsed ?? State.UngroupedCollapsed);
             if (headers)
             {
                 var s = section;

@@ -21,6 +21,7 @@ public partial class App : Application
             var store = new ProjectStore();
             // Before any view or view model exists: they read their texts once, when built.
             Loc.Init(store.State.Language);
+            InstallCrashHandlers(store);
 #if !DEBUG
             // Debug runs stay anonymous so they never replace the location of the real build.
             PeachApps.Announce("RestPeach");
@@ -59,6 +60,32 @@ public partial class App : Application
             desktop.MainWindow = window;
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static bool _reporting;
+
+    /// <summary>Exceptions that escape a handler are logged and shown; the app keeps running.</summary>
+    private static void InstallCrashHandlers(ProjectStore store)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.UnhandledException += async (_, e) =>
+        {
+            e.Handled = true;
+            var log = CrashLog.Write(store.DataFolder, e.Exception);
+            if (_reporting) return; // one dialog at a time, even if showing it fails too
+            _reporting = true;
+            try { await Dialogs.Message(Loc.T("main.crash.title"), Loc.F("main.crash.text", e.Exception.Message, log ?? store.DataFolder)); }
+            catch { }
+            finally { _reporting = false; }
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            CrashLog.Write(store.DataFolder, e.Exception);
+            e.SetObserved();
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex) CrashLog.Write(store.DataFolder, ex);
+        };
     }
 
     /// <summary>

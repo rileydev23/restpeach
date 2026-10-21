@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using RestPeach.Core.Model;
 
@@ -9,6 +10,9 @@ namespace RestPeach.Core.Http;
 public sealed record HttpOptions(int TimeoutMs = 30000, bool FollowRedirects = true, bool VerifyTls = true)
 {
     public static HttpOptions From(WorkspaceConfig c) => new(c.TimeoutMs, c.FollowRedirects, c.VerifyTls);
+
+    /// <summary>The collection's settings with what <paramref name="r"/> overrides for itself.</summary>
+    public static HttpOptions For(WorkspaceConfig c, ApiRequest r) => From(c) with { FollowRedirects = r.FollowRedirects ?? c.FollowRedirects };
 }
 
 /// <summary>What came back. <see cref="Error"/> is set (and <see cref="Status"/> is 0) when no response arrived.</summary>
@@ -25,6 +29,11 @@ public sealed class ApiResponse
     /// <summary>From sending until the last byte of the body.</summary>
     public double ElapsedMs { get; init; }
     public string? Error { get; init; }
+    /// <summary>
+    /// The body stopped before its end: "timeout", "cancelled" or "connection". What arrived until then is kept, so a
+    /// stream that never ends (SSE, long polling) can still be read.
+    /// </summary>
+    public string? Interrupted { get; init; }
     public DateTimeOffset At { get; init; } = DateTimeOffset.Now;
 
     public bool Ok => Error is null && Status is >= 200 and < 400;
@@ -96,6 +105,7 @@ public sealed class HttpEngine : IDisposable
                 UseCookies = true,
                 PooledConnectionLifetime = TimeSpan.FromMinutes(5),
                 ConnectTimeout = TimeSpan.FromSeconds(15),
+                ConnectCallback = ConnectAnyAsync,
             };
             if (!o.VerifyTls) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
             c = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
@@ -118,7 +128,7 @@ public sealed class HttpEngine : IDisposable
 
             using var msg = Build(p, uri);
             using var res = await ClientFor(options).SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-            var (body, truncated) = await ReadBodyAsync(res, timeout.Token);
+            var (body, truncated, interrupted) = await ReadBodyAsync(res, timeout.Token, ct);
             sw.Stop();
             var headers = new List<KeyValuePair<string, string>>();
             foreach (var h in res.Headers) foreach (var v in h.Value) headers.Add(new(h.Key, v));
@@ -132,6 +142,7 @@ public sealed class HttpEngine : IDisposable
                 Headers = headers,
                 Body = body,
                 Truncated = truncated,
+                Interrupted = interrupted,
                 ElapsedMs = sw.Elapsed.TotalMilliseconds,
             };
         }
@@ -146,6 +157,54 @@ public sealed class HttpEngine : IDisposable
         catch (Exception e)
         {
             return Failure(p, sw, Describe(e));
+        }
+    }
+
+    /// <summary>
+    /// Connects to every address of the host at once and keeps the first that answers. "localhost" is ::1 and
+    /// 127.0.0.1; a dev server listening only on IPv4 made each request wait ~2 s on Windows while the IPv6 attempt
+    /// timed out, before .NET tried the next address.
+    /// </summary>
+    private static async ValueTask<Stream> ConnectAnyAsync(SocketsHttpConnectionContext context, CancellationToken ct)
+    {
+        var ep = context.DnsEndPoint;
+        var addresses = IPAddress.TryParse(ep.Host, out var ip) ? new[] { ip } : await Dns.GetHostAddressesAsync(ep.Host, ct);
+        if (addresses.Length == 0) throw new SocketException((int)SocketError.HostNotFound);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var pending = addresses.Distinct().Select(a => AttemptAsync(a, ep.Port, cts.Token)).ToList();
+        Exception? error = null;
+        while (pending.Count > 0)
+        {
+            var done = await Task.WhenAny(pending);
+            pending.Remove(done);
+            try
+            {
+                var socket = await done;
+                cts.Cancel();
+                // An attempt that still wins after this one is closed, not leaked.
+                foreach (var loser in pending)
+                    _ = loser.ContinueWith(t => { if (t.IsCompletedSuccessfully) t.Result.Dispose(); }, TaskScheduler.Default);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (Exception e) when (e is SocketException or OperationCanceledException) { error = e; }
+        }
+        ct.ThrowIfCancellationRequested();
+        throw error ?? new SocketException((int)SocketError.HostUnreachable);
+    }
+
+    private static async Task<Socket> AttemptAsync(IPAddress address, int port, CancellationToken ct)
+    {
+        var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        try
+        {
+            await socket.ConnectAsync(new IPEndPoint(address, port), ct);
+            return socket;
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
         }
     }
 
@@ -226,22 +285,31 @@ public sealed class HttpEngine : IDisposable
         _ => "application/octet-stream",
     };
 
-    private static async Task<(byte[] Body, bool Truncated)> ReadBodyAsync(HttpResponseMessage res, CancellationToken ct)
+    /// <summary>
+    /// The headers have arrived: from here on a timeout, a cancel or a dropped connection keeps the bytes read so far
+    /// (marked <see cref="ApiResponse.Interrupted"/>) instead of throwing them away.
+    /// </summary>
+    private static async Task<(byte[] Body, bool Truncated, string? Interrupted)> ReadBodyAsync(HttpResponseMessage res, CancellationToken timeout, CancellationToken user)
     {
-        await using var stream = await res.Content.ReadAsStreamAsync(ct);
         using var ms = new MemoryStream();
-        var buffer = new byte[81920];
-        int n;
-        while ((n = await stream.ReadAsync(buffer, ct)) > 0)
+        try
         {
-            if (ms.Length + n > MaxBodyBytes)
+            await using var stream = await res.Content.ReadAsStreamAsync(timeout);
+            var buffer = new byte[81920];
+            int n;
+            while ((n = await stream.ReadAsync(buffer, timeout)) > 0)
             {
-                ms.Write(buffer, 0, (int)(MaxBodyBytes - ms.Length));
-                return (ms.ToArray(), true);
+                if (ms.Length + n > MaxBodyBytes)
+                {
+                    ms.Write(buffer, 0, (int)(MaxBodyBytes - ms.Length));
+                    return (ms.ToArray(), true, null);
+                }
+                ms.Write(buffer, 0, n);
             }
-            ms.Write(buffer, 0, n);
         }
-        return (ms.ToArray(), false);
+        catch (OperationCanceledException) { return (ms.ToArray(), false, user.IsCancellationRequested ? "cancelled" : "timeout"); }
+        catch (Exception e) when (e is IOException or HttpRequestException) { return (ms.ToArray(), false, "connection"); }
+        return (ms.ToArray(), false, null);
     }
 
     public void Dispose()

@@ -36,9 +36,9 @@ public static class PostmanImporter
                 foreach (var v in item.Arr("variable") ?? new JsonArray())
                     if (v.Str("key") is { Length: > 0 } key) folder.Config.Variables[key] = v.Str("value");
                 ReadItems(children, folder, warnings);
-                into.Folders.Add(folder);
+                into.Add(folder);
             }
-            else into.Requests.Add(ReadRequest(item, name, warnings));
+            else into.Add(ReadRequest(item, name, warnings));
         }
     }
 
@@ -58,6 +58,8 @@ public static class PostmanImporter
         r.Auth = req.Obj("auth") is { } a ? ReadAuth(a, warnings, name) : new AuthSpec();
         r.Body = ReadBody(req.Obj("body"), warnings, name);
         r.Tests = ConvertTests(item.Arr("event"), warnings, name);
+        if (item.Obj("protocolProfileBehavior") is { } behavior && behavior["followRedirects"] is JsonValue fr && fr.TryGetValue<bool>(out var follow))
+            r.FollowRedirects = follow;
         return r;
     }
 
@@ -121,12 +123,12 @@ public static class PostmanImporter
                 return new AuthSpec { Type = AuthTypes.ApiKey, Key = P("apikey", "key"), Value = P("apikey", "value"), In = P("apikey", "in") == "query" ? "query" : "header" };
             case "oauth2":
                 var token = P("oauth2", "accessToken");
-                warnings.Add($"{where}: OAuth 2.0 → Bearer ({(token.Length > 0 ? "token kept" : "set the token")})");
+                warnings.Add(Loc.F(token.Length > 0 ? "imp.oauth2.kept" : "imp.oauth2.set", where));
                 return AuthSpec.BearerOf(token.Length > 0 ? token : "{{ACCESS_TOKEN}}");
             case "":
                 return new AuthSpec();
             default:
-                warnings.Add($"{where}: auth \"{type}\" is not supported, it inherits instead");
+                warnings.Add(Loc.F("imp.auth.unsupported", where, type));
                 return new AuthSpec();
         }
     }
@@ -160,16 +162,15 @@ public static class PostmanImporter
                 }
                 return new BodySpec { Type = BodyTypes.FormData, Fields = fields };
             case "graphql":
-                var gql = new JsonObject { ["query"] = body.Obj("graphql")?.Str("query") ?? "" };
                 var vars = body.Obj("graphql")?.Str("variables") ?? "";
-                if (vars.Trim().Length > 0)
+                return new BodySpec
                 {
-                    try { gql["variables"] = CanonicalJson.Parse(vars); }
-                    catch (System.Text.Json.JsonException) { gql["variables"] = vars; }
-                }
-                return new BodySpec { Type = BodyTypes.Json, Data = CanonicalJson.Pretty(gql.ToJsonString()) ?? "" };
+                    Type = BodyTypes.GraphQL,
+                    Data = body.Obj("graphql")?.Str("query") ?? "",
+                    Variables = vars.Trim() is "" or "{}" ? "" : CanonicalJson.Pretty(vars) ?? vars,
+                };
             case "file":
-                warnings.Add($"{where}: binary file body not imported");
+                warnings.Add(Loc.F("imp.binaryBody", where));
                 return new BodySpec();
             default:
                 return new BodySpec();
@@ -180,22 +181,68 @@ public static class PostmanImporter
         (a ?? new JsonArray()).OfType<JsonObject>().Where(o => o.Str("key").Length > 0)
             .Select(o => new KeyValue { Key = o.Str("key"), Value = o.Str("value"), Active = !o.Bool("disabled") }).ToList();
 
+    // A path into the parsed body: pm.response.json().data.items[0].id, or json.id after "let json = pm.response.json()".
+    private const string Body = @"(?:pm\.response\.json\(\)|jsonData|json|data|body|res|j)";
+    private const string Path = @"((?:\.[A-Za-z_$][\w$]*|\[\d+\])*)";
+    private const string Str = @"['""`]([^'""`]+)['""`]";
+    private const string Value = @"(-?\d+(?:\.\d+)?|true|false|null|'[^']*'|""[^""]*"")";
+
     private static readonly (Regex Rx, Func<Match, string> Line)[] TestPatterns =
     {
         (new Regex(@"to\.have\.status\((\d{3})\)"), m => "status == " + m.Groups[1].Value),
-        (new Regex(@"response\.code\)\.to\.(?:eql|equal|be)\((\d{3})\)"), m => "status == " + m.Groups[1].Value),
+        (new Regex(@"response\.(?:code|status)\)\.to\.(?:eql|equal|be|eq)\((\d{3})\)"), m => "status == " + m.Groups[1].Value),
+        (new Regex(@"response\.(?:code|status)\)\.to\.be\.oneOf\(\[\s*([\d\s,]+?)\s*\]\)"), m =>
+        {
+            var codes = m.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return codes.Length == 1 ? "status == " + codes[0] : "status in " + string.Join(", ", codes);
+        }),
         (new Regex(@"responseTime\)\.to\.be\.below\((\d+)\)"), m => "time < " + m.Groups[1].Value + "ms"),
-        (new Regex(@"to\.have\.header\(['""]([^'""]+)['""]\)"), m => "header " + m.Groups[1].Value + " exists"),
-        (new Regex(@"pm\.environment\.set\(['""]([\w.\-]+)['""]\s*,\s*(?:pm\.response\.json\(\)|jsonData|json|data)((?:\.[A-Za-z_]\w*|\[\d+\])+)\)"),
+        (new Regex(@"to\.have\.header\(" + Str + @"\s*,\s*" + Str + @"\)"), m => $"header {m.Groups[1].Value} == \"{m.Groups[2].Value}\""),
+        (new Regex(@"to\.have\.header\(" + Str + @"\)"), m => "header " + m.Groups[1].Value + " exists"),
+        (new Regex(@"headers\.get\(" + Str + @"\)\)\.to\.(?:eql|equal|eq)\(" + Str + @"\)"), m => $"header {m.Groups[1].Value} == \"{m.Groups[2].Value}\""),
+        (new Regex(@"headers\.get\(" + Str + @"\)\)\.to\.(?:include|contain)\(" + Str + @"\)"), m => $"header {m.Groups[1].Value} contains {m.Groups[2].Value}"),
+        (new Regex(@"expect\(" + Body + Path + @"\)\.to\.(?:eql|equal|eq)\(" + Value + @"\)"), m => $"${m.Groups[1].Value} == {Quote(m.Groups[2].Value)}"),
+        (new Regex(@"expect\(" + Body + Path + @"\)\.to\.not\.(?:eql|equal|eq)\(" + Value + @"\)"), m => $"${m.Groups[1].Value} != {Quote(m.Groups[2].Value)}"),
+        (new Regex(@"expect\(" + Body + Path + @"\)\.to\.be\.(null|true|false)\b"), m => $"${m.Groups[1].Value} == {m.Groups[2].Value}"),
+        (new Regex(@"expect\(" + Body + Path + @"\)\.to\.have\.length(?:Of)?\((\d+)\)"), m => $"${m.Groups[1].Value}.length == {m.Groups[2].Value}"),
+        (new Regex(@"expect\(" + Body + Path + @"\)\.to\.be\.(above|greaterThan|below|lessThan|at\.least|at\.most)\((-?\d+(?:\.\d+)?)\)"), m =>
+            $"${m.Groups[1].Value} {Compare(m.Groups[2].Value)} {m.Groups[3].Value}"),
+        (new Regex(@"expect\(" + Body + Path + @"\)\.to\.(?:include|contain|have\.string)\(" + Str + @"\)"), m => $"${m.Groups[1].Value} contains {m.Groups[2].Value}"),
+        (new Regex(@"expect\(" + Body + Path + @"\)\.to\.(?:exist|be\.an?\(" + Str + @"\)|have\.property\(" + Str + @"\))"), m =>
+            "$" + m.Groups[1].Value + (m.Groups[3].Success ? "." + m.Groups[3].Value : "") + " exists"),
+        (new Regex(@"pm\.(?:environment|collectionVariables|globals|variables)\.set\(" + Str + @"\s*,\s*" + Body + Path + @"\s*\)"),
             m => "set " + m.Groups[1].Value + " = $" + m.Groups[2].Value),
+        (new Regex(@"pm\.(?:environment|collectionVariables|globals|variables)\.set\(" + Str + @"\s*,\s*pm\.response\.headers\.get\(" + Str + @"\)\s*\)"),
+            m => "set " + m.Groups[1].Value + " = header " + m.Groups[2].Value),
     };
 
-    /// <summary>The few test idioms that have a declarative equivalent; the rest of the script is reported, not run.</summary>
+    /// <summary>'text' (JavaScript) → "text" (a test line); numbers, true, false and null as they are.</summary>
+    private static string Quote(string v) => v.StartsWith('\'') ? "\"" + v[1..^1] + "\"" : v;
+
+    private static string Compare(string chai) => chai switch
+    {
+        "above" or "greaterThan" => ">",
+        "below" or "lessThan" => "<",
+        "at.least" => ">=",
+        _ => "<=",
+    };
+
+    /// <summary>A line that only parses the body or opens/closes a block: nothing to convert, nothing lost.</summary>
+    private static readonly Regex Boilerplate = new(
+        @"^(?:(?:let|const|var)\s+\w+\s*=\s*(?:\{\}|pm\.response\.json\(\))\s*;?\s*)?(?:try\s*\{.*\}\s*catch\s*(?:\(\w*\))?\s*\{\s*\}\s*;?)?[{}();\s]*$");
+
+    /// <summary>Checks and captures that do something: each one has to become a line, or it is reported.</summary>
+    private static readonly Regex Statement = new(@"pm\.expect\(|pm\.response\.to\.|\.set\(");
+
+    /// <summary>
+    /// The test idioms that have a declarative equivalent become test lines; whatever is left (loops, computed
+    /// values, pre-request scripts) is reported with the first line that could not be converted.
+    /// </summary>
     private static List<string> ConvertTests(JsonArray? events, List<string> warnings, string where)
     {
         var lines = new List<string>();
         if (events is null) return lines;
-        bool dropped = false;
+        string? lost = null;
         foreach (var e in events.OfType<JsonObject>())
         {
             var exec = e.Obj("script")?["exec"];
@@ -206,14 +253,27 @@ public static class PostmanImporter
                 _ => "",
             };
             if (code.Trim().Length == 0) continue;
-            if (e.Str("listen") != "test") { dropped = true; continue; }
-            int before = lines.Count;
-            foreach (var (rx, line) in TestPatterns)
-                foreach (Match m in rx.Matches(code)) lines.Add(line(m));
-            if (lines.Count == before || code.Split('\n').Count(l => l.Trim().Length > 0 && !l.TrimStart().StartsWith("//")) > (lines.Count - before) * 3 + 2)
-                dropped = true;
+            if (e.Str("listen") != "test")
+            {
+                // A pre-request script usually prepares variables: say which, so they can be set by hand.
+                var names = Regex.Matches(code, @"pm\.(?:environment|collectionVariables|globals|variables)\.set\(" + Str)
+                    .Select(m => m.Groups[1].Value).Distinct().ToList();
+                warnings.Add(names.Count > 0 ? Loc.F("imp.prerequest.vars", where, string.Join(", ", names)) : Loc.F("imp.prerequest", where));
+                continue;
+            }
+            foreach (var raw in code.Split('\n'))
+            {
+                var line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("//") || Boilerplate.IsMatch(line)) continue;
+                int found = 0;
+                foreach (var (rx, convert) in TestPatterns)
+                    foreach (Match m in rx.Matches(line)) { lines.Add(convert(m)); found++; }
+                // Each pattern matches one statement; fewer matches than statements means something was left out.
+                if (found < Math.Max(1, Statement.Matches(line).Count) || line.Contains("forEach") || line.Contains("Number("))
+                    lost ??= line;
+            }
         }
-        if (dropped) warnings.Add($"{where}: scripts are not run; only simple checks were converted to tests");
+        if (lost is not null) warnings.Add(Loc.F("imp.scripts", where, lost.Length > 90 ? lost[..87] + "..." : lost));
         return lines.Distinct().ToList();
     }
 

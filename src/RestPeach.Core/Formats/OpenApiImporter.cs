@@ -98,7 +98,7 @@ public static partial class OpenApiImporter
                     r.Headers.Add(KeyValue.Of(pname, example, required));
                     break;
                 case "cookie":
-                    warnings.Add($"{r.Name}: cookie parameter \"{pname}\" not imported");
+                    warnings.Add(Loc.F("imp.cookieParam", r.Name, pname));
                     break;
             }
         }
@@ -247,7 +247,7 @@ public static partial class OpenApiImporter
                     return new AuthSpec { Type = AuthTypes.ApiKey, Key = s.Str("name"), Value = "{{API_KEY}}", In = s.Str("in") };
                 if (type is "oauth2" or "openidconnect")
                 {
-                    warnings.Add($"Security \"{name}\" ({type}): imported as Bearer {{{{TOKEN}}}}");
+                    warnings.Add(Loc.F("imp.security", name, type));
                     return AuthSpec.BearerOf("{{TOKEN}}");
                 }
             }

@@ -44,6 +44,9 @@ public sealed record TestRow(string Glyph, IBrush Brush, string Line, string Det
     public bool HasDetail => Detail.Length > 0;
 }
 
+/// <summary>A line about the response in the terms of its API style (see <see cref="ProtocolInsight"/>).</summary>
+public sealed record InsightRow(string Text, IBrush Brush);
+
 /// <summary>
 /// One request open in a tab: an editable copy of its file plus the last response. Nothing is written until Save
 /// (Ctrl+S); the dot in the title says there are unsaved changes. Sending uses what is on screen, saved or not.
@@ -68,6 +71,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     {
         new Choice(Core.Model.BodyTypes.None, Loc.T("body.none")),
         new Choice(Core.Model.BodyTypes.Json, "JSON"),
+        new Choice(Core.Model.BodyTypes.GraphQL, "GraphQL"),
         new Choice(Core.Model.BodyTypes.Text, Loc.T("body.text")),
         new Choice(Core.Model.BodyTypes.Xml, "XML"),
         new Choice(Core.Model.BodyTypes.Html, "HTML"),
@@ -80,6 +84,8 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public KeyValueTable BodyFields { get; } = new() { ShowType = true, KeyWatermark = Loc.T("kv.field") };
     public AuthEditor Auth { get; } = new(canInherit: true);
     public TextDocument BodyDocument { get; } = new();
+    /// <summary>GraphQL variables (JSON); the query itself is <see cref="BodyDocument"/>.</summary>
+    public TextDocument VariablesDocument { get; } = new();
     public TextDocument ResponseDocument { get; } = new();
 
     [ObservableProperty]
@@ -88,8 +94,11 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [ObservableProperty] private string _url = "";
     [ObservableProperty] private string _description = "";
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRawBody), nameof(IsFormBody), nameof(IsNoBody), nameof(BodyExtension))]
+    [NotifyPropertyChangedFor(nameof(IsRawBody), nameof(IsFormBody), nameof(IsNoBody), nameof(BodyExtension), nameof(IsGraphQLBody), nameof(IsEditorBody))]
     private Choice _bodyType;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasKind), nameof(KindName), nameof(KindTip), nameof(KindBrush))]
+    private ApiKind _kind;
     [ObservableProperty] private string _testsText = "";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsParamsSection), nameof(IsHeadersSection), nameof(IsAuthSection), nameof(IsBodySection), nameof(IsTestsSection), nameof(IsDocsSection))]
@@ -119,6 +128,9 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [ObservableProperty] private IReadOnlyList<CookieRow> _responseCookies = Array.Empty<CookieRow>();
     [ObservableProperty] private IReadOnlyList<TestRow> _testRows = Array.Empty<TestRow>();
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasInsights))]
+    private IReadOnlyList<InsightRow> _insights = Array.Empty<InsightRow>();
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBodyResponse), nameof(IsHeadersResponse), nameof(IsCookiesResponse), nameof(IsTestsResponse))]
     private string _responseSection = "body";
     [ObservableProperty] private string _responseUrl = "";
@@ -147,6 +159,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         BodyFields.Changed += Edited;
         Auth.Changed += Edited;
         BodyDocument.TextChanged += (_, _) => Edited();
+        VariablesDocument.TextChanged += (_, _) => Edited();
         Load();
     }
 
@@ -154,9 +167,41 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public bool IsRawBody => Core.Model.BodyTypes.IsRaw(BodyType.Value);
     public bool IsFormBody => Core.Model.BodyTypes.IsForm(BodyType.Value);
     public bool IsNoBody => BodyType.Value == Core.Model.BodyTypes.None;
+    public bool IsGraphQLBody => BodyType.Value == Core.Model.BodyTypes.GraphQL;
+    /// <summary>The body is edited as text (raw bodies, and the query of a GraphQL body).</summary>
+    public bool IsEditorBody => IsRawBody || IsGraphQLBody;
+    public bool HasInsights => Insights.Count > 0;
+    public bool HasKind => Kind != ApiKind.Rest;
+    public string KindName => ApiKinds.Name(Kind);
+    public IBrush KindBrush => Look.TagBrush(Method, Kind);
+    public string KindTip => Kind switch
+    {
+        ApiKind.GraphQL => Loc.T("kind.graphql.tip"),
+        ApiKind.JsonRpc => Loc.T("kind.jsonrpc.tip"),
+        ApiKind.Soap => Loc.T("kind.soap.tip"),
+        _ => "",
+    };
+
+    private bool? _followRedirects;
+
+    /// <summary>"Do not follow redirects" for this request only (the ⋯ menu); off = the collection's setting.</summary>
+    public bool NoRedirects
+    {
+        get => _followRedirects == false;
+        set
+        {
+            bool? v = value ? false : null;
+            if (_followRedirects == v) return;
+            _followRedirects = v;
+            OnPropertyChanged();
+            Edited();
+        }
+    }
+
     public string BodyExtension => BodyType.Value switch
     {
         Core.Model.BodyTypes.Json => ".json",
+        Core.Model.BodyTypes.GraphQL => ".graphql",
         Core.Model.BodyTypes.Xml => ".xml",
         Core.Model.BodyTypes.Html => ".html",
         _ => ".txt",
@@ -231,8 +276,12 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
             Auth.Load(r.Auth);
             BodyType = BodyTypes.FirstOrDefault(b => b.Value == r.Body.Type) ?? BodyTypes[0];
             BodyDocument.Text = r.Body.Data;
+            VariablesDocument.Text = r.Body.Variables;
             BodyFields.Load(r.Body.Fields);
             TestsText = string.Join("\n", r.Tests);
+            _followRedirects = r.FollowRedirects;
+            OnPropertyChanged(nameof(NoRedirects));
+            Kind = ApiKinds.Of(r);
         }
         finally
         {
@@ -258,8 +307,9 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
             Headers = Headers.ToList(),
             DisabledParams = all.Where(p => !p.Active).ToList(),
             Auth = Auth.ToModel(),
-            Body = new BodySpec { Type = BodyType.Value, Data = BodyDocument.Text, Fields = BodyFields.ToList() },
+            Body = new BodySpec { Type = BodyType.Value, Data = BodyDocument.Text, Variables = VariablesDocument.Text, Fields = BodyFields.ToList() },
             Tests = TestLines().ToList(),
+            FollowRedirects = _followRedirects,
             Extra = (JsonObject)_extra.DeepClone(),
         };
     }
@@ -268,9 +318,16 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
 
     partial void OnMethodChanged(string value)
     {
-        Badge = Look.MethodTag(value);
-        BadgeBrush = Look.Method(value);
+        Badge = Look.Tag(value, Kind);
+        BadgeBrush = Look.TagBrush(value, Kind);
+        OnPropertyChanged(nameof(KindBrush));
         Edited();
+    }
+
+    partial void OnKindChanged(ApiKind value)
+    {
+        Badge = Look.Tag(Method, value);
+        BadgeBrush = Look.TagBrush(Method, value);
     }
 
     partial void OnUrlChanged(string value)
@@ -315,8 +372,11 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     partial void OnBodyTypeChanged(Choice value)
     {
         // Choosing a raw type the first time pre-fills nothing, but keeps what was typed for another raw type.
+        // A GraphQL body starts from an empty operation, so the editor is not a blank page.
+        if (!_loading && value.Value == Core.Model.BodyTypes.GraphQL && BodyDocument.TextLength == 0) BodyDocument.Text = "query {\n  \n}";
         BodyTypeChangedForView?.Invoke();
         Edited();
+        if (!_loading) Kind = ApiKinds.Of(BuildModel());
     }
 
     partial void OnDescriptionChanged(string value) => Edited();
@@ -343,15 +403,17 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     private void RecomputeDirty()
     {
         if (LoadError is not null) return;
-        IsDirty = Workspace.Serialize(BuildModel(), RelPath) != _savedText;
+        var model = BuildModel();
+        IsDirty = Workspace.Serialize(model, RelPath) != _savedText;
+        Kind = ApiKinds.Of(model);
         UpdateTitle();
     }
 
     private void UpdateTitle()
     {
         Title = (IsDirty ? "● " : "") + _name;
-        Badge = Look.MethodTag(Method);
-        BadgeBrush = Look.Method(Method);
+        Badge = Look.Tag(Method, Kind);
+        BadgeBrush = Look.TagBrush(Method, Kind);
         ToolTip = RelPath;
     }
 
@@ -468,9 +530,9 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         _host.Notify(Loc.F("rv.sending", prepared.Method, prepared.Url));
         try
         {
-            var response = await _host.Engine.SendAsync(prepared, HttpOptions.From(_host.Config), cts.Token);
+            var response = await _host.Engine.SendAsync(prepared, HttpOptions.For(_host.Config, model), cts.Token);
             var results = response.Error is null ? Assertions.Evaluate(model.Tests, response, _host.Runtime) : new List<AssertionResult>();
-            await ShowResponseAsync(response, results);
+            await ShowResponseAsync(response, results, prepared.Kind);
             if (results.Any(r => r.IsCapture && r.Passed)) _host.RuntimeChanged();
             _host.Notify(response.Error is null
                 ? Loc.F("rv.received", response.Status, response.Reason, ResponseFormatter.Duration(response.ElapsedMs))
@@ -486,9 +548,10 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [RelayCommand]
     private void Cancel() => _sendCts?.Cancel();
 
-    private async Task ShowResponseAsync(ApiResponse r, List<AssertionResult> results)
+    private async Task ShowResponseAsync(ApiResponse r, List<AssertionResult> results, ApiKind kind)
     {
         _lastResponse = r;
+        Insights = ProtocolInsight.Describe(kind, r).Select(i => new InsightRow(i.Text, Look.Insight(i.Level))).ToList();
         ResponseUrl = r.FinalUrl;
         ResponseError = r.Error;
         StatusText = r.Error is not null ? Loc.T("rv.error") : $"{r.Status} {r.Reason}";
@@ -624,6 +687,14 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [RelayCommand]
     private void FormatBody()
     {
+        if (IsGraphQLBody)
+        {
+            // The query is left as written; the variables are JSON.
+            if (VariablesDocument.TextLength == 0) return;
+            if (Core.Text.CanonicalJson.Pretty(VariablesDocument.Text) is { } vars) VariablesDocument.Text = vars;
+            else _host.Notify(Loc.T("rv.formatFailed"));
+            return;
+        }
         var text = BodyType.Value switch
         {
             Core.Model.BodyTypes.Json => Core.Text.CanonicalJson.Pretty(BodyDocument.Text),

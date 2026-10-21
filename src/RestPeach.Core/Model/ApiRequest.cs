@@ -60,9 +60,12 @@ public static class BodyTypes
     public const string Html = "html";
     public const string FormData = "form-data";
     public const string UrlEncoded = "urlencoded";
+    /// <summary>A GraphQL operation: <see cref="BodySpec.Data"/> is the query, <see cref="BodySpec.Variables"/> its variables (JSON).</summary>
+    public const string GraphQL = "graphql";
 
-    public static readonly string[] All = { None, Json, Text, Xml, Html, FormData, UrlEncoded };
+    public static readonly string[] All = { None, Json, Text, Xml, Html, FormData, UrlEncoded, GraphQL };
 
+    /// <summary>Bodies sent as the text of <see cref="BodySpec.Data"/> as is (GraphQL is wrapped in JSON first).</summary>
     public static bool IsRaw(string type) => type is Json or Text or Xml or Html;
     public static bool IsForm(string type) => type is FormData or UrlEncoded;
 
@@ -74,6 +77,7 @@ public static class BodyTypes
         Xml => "application/xml",
         Html => "text/html",
         UrlEncoded => "application/x-www-form-urlencoded",
+        GraphQL => "application/json",
         _ => null,
     };
 }
@@ -81,12 +85,14 @@ public static class BodyTypes
 public sealed class BodySpec
 {
     public string Type { get; set; } = BodyTypes.None;
-    /// <summary>Raw bodies (json, text, xml, html).</summary>
+    /// <summary>Raw bodies (json, text, xml, html); the query of a GraphQL body.</summary>
     public string Data { get; set; } = "";
+    /// <summary>GraphQL only: the variables, as JSON text (may hold <c>{{placeholders}}</c>).</summary>
+    public string Variables { get; set; } = "";
     /// <summary>Form bodies (form-data, urlencoded).</summary>
     public List<KeyValue> Fields { get; set; } = new();
 
-    public BodySpec Clone() => new() { Type = Type, Data = Data, Fields = Fields.Select(f => f.Clone()).ToList() };
+    public BodySpec Clone() => new() { Type = Type, Data = Data, Variables = Variables, Fields = Fields.Select(f => f.Clone()).ToList() };
 }
 
 /// <summary>
@@ -106,6 +112,8 @@ public sealed class ApiRequest
     public BodySpec Body { get; set; } = new();
     /// <summary>Declarative assertions and captures, one per line (see <see cref="Testing.Assertions"/>).</summary>
     public List<string> Tests { get; set; } = new();
+    /// <summary>Overrides the collection's "follow redirects" for this request only; null = use the collection's.</summary>
+    public bool? FollowRedirects { get; set; }
     public JsonObject Extra { get; set; } = new();
 
     public static readonly string[] Methods = { "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD" };
@@ -121,6 +129,7 @@ public sealed class ApiRequest
         Auth = Auth.Clone(),
         Body = Body.Clone(),
         Tests = Tests.ToList(),
+        FollowRedirects = FollowRedirects,
         Extra = (JsonObject)Extra.DeepClone(),
     };
 }

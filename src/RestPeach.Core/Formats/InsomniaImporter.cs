@@ -31,13 +31,13 @@ public static class InsomniaImporter
                         foreach (var (k, v) in Flatten(c.Obj("environment"))) sub.Config.Variables[k] = v;
                         sub.Config.Auth = ReadAuth(c.Obj("authentication"));
                         Fill(c.Str("_id"), sub);
-                        folder.Folders.Add(sub);
+                        folder.Add(sub);
                         break;
                     case "request":
-                        folder.Requests.Add(ReadRequestV4(c, result.Warnings));
+                        folder.Add(ReadRequestV4(c, result.Warnings));
                         break;
                     case "grpc_request" or "websocket_request":
-                        result.Warnings.Add($"{c.Str("name")}: {c.Str("_type")} is not supported");
+                        result.Warnings.Add(Loc.F("imp.unsupportedKind", c.Str("name"), c.Str("_type")));
                         break;
                 }
             }
@@ -86,7 +86,7 @@ public static class InsomniaImporter
         r.Auth = ReadAuth(c.Obj("authentication"));
         r.Body = ReadBody(c.Obj("body"));
         if ((r.Url + string.Concat(r.Headers.Select(h => h.Value)) + r.Body.Data).Contains("{%"))
-            warnings.Add($"{r.Name}: Insomnia template tags ({{% … %}}) are kept as text");
+            warnings.Add(Loc.F("imp.insomniaTags", r.Name));
         return r;
     }
 
@@ -124,6 +124,19 @@ public static class InsomniaImporter
             return new BodySpec { Type = mime.Contains("multipart") ? BodyTypes.FormData : BodyTypes.UrlEncoded, Fields = fields };
         }
         var text = Importer.Vars(b.Str("text"));
+        // Insomnia keeps a GraphQL body as the JSON text {"query", "variables"}.
+        if (mime.Contains("graphql"))
+        {
+            try
+            {
+                if (CanonicalJson.Parse(text) is JsonObject gql && gql.ContainsKey("query"))
+                {
+                    var vars = gql["variables"] is JsonObject { Count: > 0 } v ? CanonicalJson.Pretty(v.ToJsonString()) ?? "" : "";
+                    return new BodySpec { Type = BodyTypes.GraphQL, Data = gql.Str("query"), Variables = vars };
+                }
+            }
+            catch (System.Text.Json.JsonException) { }
+        }
         var type = mime.Contains("json") || mime.Contains("graphql") ? BodyTypes.Json
             : mime.Contains("xml") ? BodyTypes.Xml
             : mime.Contains("html") ? BodyTypes.Html
@@ -162,7 +175,7 @@ public static class InsomniaImporter
                     foreach (var (k, v) in Flatten(item.Obj("environment"))) sub.Config.Variables[k] = v;
                     sub.Config.Auth = ReadAuth(item.Obj("authentication"));
                     Fill(children, sub);
-                    folder.Folders.Add(sub);
+                    folder.Add(sub);
                 }
                 else if (item.ContainsKey("url") || item.ContainsKey("method"))
                 {
@@ -170,7 +183,7 @@ public static class InsomniaImporter
                     var copy = (JsonObject)item.DeepClone();
                     if (copy["headers"] is JsonArray hs)
                         foreach (var h in hs.OfType<JsonObject>()) h["disabled"] = h.Bool("disabled");
-                    folder.Requests.Add(ReadRequestV4(copy, result.Warnings));
+                    folder.Add(ReadRequestV4(copy, result.Warnings));
                 }
             }
         }

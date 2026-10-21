@@ -40,6 +40,7 @@ Todo lo que RestPeach guarda de una colección es texto plano dentro de la carpe
 | `timeoutMs` | Tiempo máximo de cada petición (100 ms a 1 h). |
 | `followRedirects` | Seguir redirecciones 3xx. |
 | `verifyTls` | Verificar el certificado del servidor. Desactívalo solo para servidores locales. |
+| `order` | Orden de lo que está en la raíz de la colección (ver [Orden](#orden)). |
 
 ## `folder.json` (una carpeta, opcional)
 
@@ -51,6 +52,17 @@ Todo lo que RestPeach guarda de una colección es texto plano dentro de la carpe
 ```
 
 Vale para todo lo que está debajo de la carpeta. Si no define nada, el archivo no existe.
+
+### Orden
+
+```json
+{ "order": [ "Login.req.json", "Me.req.json", "Admin" ] }
+```
+
+`order` (en `folder.json`, o en `config.json` para la raíz) lista nombres de archivos y carpetas en el orden en que
+se muestran y se ejecutan. Al importar se guarda el orden de la colección original (el login antes que lo que usa su
+token). Lo que no está en la lista va después: carpetas primero y luego peticiones, en orden natural (`2.` antes que
+`10.`). Renombrar o mover desde la app mantiene la lista al día.
 
 ## Peticiones (`<nombre>.req.json`)
 
@@ -81,6 +93,7 @@ Vale para todo lo que está debajo de la carpeta. Si no define nada, el archivo 
 | `body` | Ver [Body](#body). |
 | `tests` | Pruebas y capturas, una por elemento. Ver el [README](../README.md#pruebas-declarativas). |
 | `description` | Notas libres (pestaña Notas). |
+| `followRedirects` | Solo para esta petición: `false` no sigue redirecciones aunque la colección sí. Si no está, vale el de la colección. |
 
 En YAML es lo mismo:
 
@@ -113,6 +126,13 @@ Si la petición ya tiene un header `Authorization`, la auth no lo reemplaza.
 | `json`, `text`, `xml`, `html` | `data` (texto) | `application/json`, `text/plain`, `application/xml`, `text/html` |
 | `urlencoded` | `fields` | `application/x-www-form-urlencoded` |
 | `form-data` | `fields`; un campo con `"type": "file"` envía el archivo de `value` (ruta relativa al proyecto) | `multipart/form-data` con su *boundary* |
+| `graphql` | `query` (texto) y `variables` (objeto JSON, o texto si tiene `{{VARIABLES}}` fuera de comillas) | `application/json` |
+
+Un body `graphql` se envía como `{"query": …, "variables": …}` en JSON; con `GET`, como `?query=…&variables=…` en la
+URL. En el árbol la petición se marca **GQL**; las que mandan JSON-RPC 2.0 (`"jsonrpc": "2.0"`) se marcan **RPC** y
+las que mandan un sobre SOAP, **SOAP**. Al recibir la respuesta, una línea sobre ella resume lo que significa en ese
+protocolo (errores de GraphQL o JSON-RPC que llegan con 200, `soap:Fault`, eventos SSE, líneas NDJSON, errores
+RFC 7807).
 
 Solo se escriben los campos que usa el tipo, así cambiar de tipo en la app no deja restos en git.
 

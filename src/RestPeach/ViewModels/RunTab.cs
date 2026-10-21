@@ -23,8 +23,9 @@ public sealed class RunRow
     public string Name => Workspace.Join(Workspace.ParentOf(RelPath), Result.Name);
     public string Glyph => Result.Passed ? "✓" : "✗";
     public IBrush GlyphBrush => Result.Passed ? Palette.Green : Palette.Red;
-    public string Method => Look.MethodTag(Result.Sent?.Method ?? Result.Request?.Method ?? "");
-    public IBrush MethodBrush => Look.Method(Result.Sent?.Method ?? Result.Request?.Method ?? "");
+    private Core.Model.ApiKind Kind => Result.Sent?.Kind ?? (Result.Request is { } r ? Core.Model.ApiKinds.Of(r) : Core.Model.ApiKind.Rest);
+    public string Method => Look.Tag(Result.Sent?.Method ?? Result.Request?.Method ?? "", Kind);
+    public IBrush MethodBrush => Look.TagBrush(Result.Sent?.Method ?? Result.Request?.Method ?? "", Kind);
     public string Status => Result.Error is not null ? Loc.T("run.notSent")
         : Result.Response?.Error is not null ? Loc.T("rv.error")
         : $"{Result.Response?.Status} {Result.Response?.Reason}";
@@ -123,6 +124,8 @@ public sealed class RunRow
             var rows = new List<TestRow>();
             if (Result.Error is not null) rows.Add(new TestRow("!", Palette.Red, Result.Error, ""));
             if (Result.Response?.Error is { } e) rows.Add(new TestRow("!", Palette.Red, e, Result.Sent?.Url ?? ""));
+            if (Result.Response is { } response)
+                foreach (var i in ProtocolInsight.Describe(Kind, response)) rows.Add(new TestRow("»", Look.Insight(i.Level), i.Text, ""));
             foreach (var a in Result.Assertions)
             {
                 rows.Add(a.IsCapture
@@ -130,7 +133,7 @@ public sealed class RunRow
                     : a.Error is not null ? new TestRow("!", Palette.Red, a.Line, a.Error)
                     : new TestRow(a.Passed ? "✓" : "✗", a.Passed ? Palette.Green : Palette.Red, a.Line, a.Passed ? "" : Loc.F("rv.got", a.Actual ?? Loc.T("rv.nothing"))));
             }
-            if (rows.Count == 0 && Result.Response is { } r)
+            if (Result.Assertions.Count == 0 && Result.Error is null && Result.Response is { Error: null } r)
                 rows.Add(new TestRow(Result.Passed ? "✓" : "✗", GlyphBrush, Result.Passed ? Loc.T("run.noTestsOk") : Loc.T("run.noTestsFail"), Result.Sent?.Url ?? ""));
             return rows;
         }

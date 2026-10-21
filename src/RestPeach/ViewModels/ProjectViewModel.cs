@@ -425,7 +425,7 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
         if (SelectedRequest is { } req)
         {
             var model = req.BuildModel();
-            var texts = new List<string> { model.Url, model.Body.Data, model.Auth.Token, model.Auth.Username, model.Auth.Password, model.Auth.Key, model.Auth.Value };
+            var texts = new List<string> { model.Url, model.Body.Data, model.Body.Variables, model.Auth.Token, model.Auth.Username, model.Auth.Password, model.Auth.Key, model.Auth.Value };
             texts.AddRange(model.Headers.Where(h => h.Active).SelectMany(h => new[] { h.Key, h.Value }));
             texts.AddRange(model.Body.Fields.Where(h => h.Active).SelectMany(h => new[] { h.Key, h.Value }));
             var effective = AuthResolver.Resolve(model.Auth, Ws.FolderChain(req.FolderRel), Config);
@@ -514,6 +514,27 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
         if (string.IsNullOrWhiteSpace(name)) return;
         var hasBase = Runner.Scope(Ws, Config, folder, CurrentEnvironment, Runtime).Get("BASE_URL") is not null;
         var rel = Ws.CreateRequest(folder, new ApiRequest { Name = name.Trim(), Method = "GET", Url = hasBase ? "{{BASE_URL}}/" : "" });
+        await RebuildTreeAsync();
+        Reveal(rel);
+        OpenRequest(rel)?.FocusUrl();
+        Notice = Loc.F("pv.created", rel);
+    }
+
+    /// <summary>A POST to {{BASE_URL}}/graphql with an empty operation: the shape every GraphQL request has.</summary>
+    private async Task NewGraphQLRequestAsync(TreeNode? node)
+    {
+        if (_ws is null) return;
+        var folder = TargetFolder(node);
+        var name = await Dialogs.Prompt(Loc.T("pv.newRequest.title"), Loc.F("pv.newRequest.label", folder.Length == 0 ? CollectionName : folder), Loc.T("pv.newGraphQL.default"));
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var hasBase = Runner.Scope(Ws, Config, folder, CurrentEnvironment, Runtime).Get("BASE_URL") is not null;
+        var rel = Ws.CreateRequest(folder, new ApiRequest
+        {
+            Name = name.Trim(),
+            Method = "POST",
+            Url = hasBase ? "{{BASE_URL}}/graphql" : "",
+            Body = new BodySpec { Type = BodyTypes.GraphQL, Data = "query {\n  \n}" },
+        });
         await RebuildTreeAsync();
         Reveal(rel);
         OpenRequest(rel)?.FocusUrl();
@@ -792,6 +813,8 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
             await Dialogs.Message(Loc.T("pv.import.error"), e.Message);
             return;
         }
+        Config = Ws.LoadConfig();
+        CollectionName = Config.Name.Length > 0 ? Config.Name : Title;
         LoadEnvironments();
         await RebuildTreeAsync();
         if (summary.FolderRel.Length > 0 && NodeFor(summary.FolderRel) is { IsFolder: true } f) { Reveal(f.RelPath); f.IsExpanded = true; }
@@ -806,7 +829,13 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
             message += " " + Loc.F("pv.importedEnvs", summary.EnvironmentsCreated, summary.EnvironmentsMerged);
         Notice = message;
         if (result.Warnings.Count > 0)
-            await Dialogs.Message(Loc.T("pv.import.warnings"), message + "\n\n" + string.Join("\n", result.Warnings.Select(w => "• " + w)));
+        {
+            // A big collection can have hundreds: the first ones say what kind of thing was left out.
+            const int shown = 25;
+            var lines = result.Warnings.Take(shown).Select(w => "• " + w).ToList();
+            if (result.Warnings.Count > shown) lines.Add(Loc.F("pv.import.more", result.Warnings.Count - shown));
+            await Dialogs.Message(Loc.T("pv.import.warnings"), message + "\n\n" + string.Join("\n", lines));
+        }
     }
 
     private async Task ExportAsync(string relDir, string format)
@@ -850,6 +879,7 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
         if (node is null || node.IsFolder)
         {
             items.Add(new MenuAction(Loc.T("pv.menu.newRequest"), () => NewRequestAsync(node), "Ctrl+N"));
+            items.Add(new MenuAction(Loc.T("pv.menu.newGraphQL"), () => NewGraphQLRequestAsync(node)));
             items.Add(new MenuAction(Loc.T("pv.menu.newFolder"), () => NewFolderAsync(node), "Ctrl+Shift+N"));
             items.Add(MenuAction.Separator);
             var dir = node?.RelPath ?? "";
@@ -881,7 +911,7 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
             items.Add(new MenuAction(Loc.T("peach.openTextPeach"), () => OpenInTextPeachAsync(node.RelPath)));
             items.Add(MenuAction.Sync(Loc.T("pv.menu.showInFolder"), () => ShowInFolder(node)));
             items.Add(MenuAction.Separator);
-            items.Add(new MenuAction(Loc.T("pv.menu.delete"), () => DeleteAsync(node), "Del"));
+            items.Add(new MenuAction(Loc.T("pv.menu.delete"), () => DeleteAsync(node), "Delete"));
         }
         return MenuList.Clean(items);
     }

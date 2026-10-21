@@ -86,6 +86,7 @@ public static partial class Exporter
             if (PostmanBody(r.Body) is { } body) req["body"] = body;
 
             var item = new JsonObject { ["name"] = r.Name, ["request"] = req };
+            if (r.FollowRedirects is { } follow) item["protocolProfileBehavior"] = new JsonObject { ["followRedirects"] = follow };
             if (PostmanTests(r.Tests) is { Count: > 0 } exec)
                 item["event"] = new JsonArray(new JsonObject { ["listen"] = "test", ["script"] = new JsonObject { ["type"] = "text/javascript", ["exec"] = exec } });
             FolderItems(Workspace.ParentOf(e.RelPath)).Add((JsonNode)item);
@@ -142,6 +143,11 @@ public static partial class Exporter
             BodyTypes.None => null,
             BodyTypes.FormData => new JsonObject { ["mode"] = "formdata", ["formdata"] = Rows(true) },
             BodyTypes.UrlEncoded => new JsonObject { ["mode"] = "urlencoded", ["urlencoded"] = Rows(false) },
+            BodyTypes.GraphQL => new JsonObject
+            {
+                ["mode"] = "graphql",
+                ["graphql"] = new JsonObject { ["query"] = b.Data, ["variables"] = b.Variables.Trim().Length > 0 ? b.Variables : "{}" },
+            },
             _ => new JsonObject
             {
                 ["mode"] = "raw",
@@ -319,6 +325,16 @@ public static partial class Exporter
                 try { example = CanonicalJson.Parse(b.Data); }
                 catch (System.Text.Json.JsonException) { example = b.Data; } // placeholders outside strings are not JSON
                 return Content("application/json", new JsonObject { ["example"] = example });
+            case BodyTypes.GraphQL:
+                JsonNode? variables = null;
+                if (b.Variables.Trim().Length > 0)
+                {
+                    try { variables = CanonicalJson.Parse(b.Variables); }
+                    catch (System.Text.Json.JsonException) { variables = b.Variables; }
+                }
+                var operation = new JsonObject { ["query"] = b.Data };
+                if (variables is not null) operation["variables"] = variables;
+                return Content("application/json", new JsonObject { ["example"] = operation });
             case BodyTypes.FormData: return Content("multipart/form-data", new JsonObject { ["schema"] = FormSchema() });
             case BodyTypes.UrlEncoded: return Content("application/x-www-form-urlencoded", new JsonObject { ["schema"] = FormSchema() });
             default: return Content(BodyTypes.DefaultContentType(b.Type) ?? "text/plain", new JsonObject { ["example"] = b.Data });

@@ -29,6 +29,17 @@ public static class MenuPresenter
         new ContextMenu { ItemsSource = Build(actions) }.Open(target);
     }
 
+    /// <summary>
+    /// The shortcut shown next to an entry. It is only a hint: a text Avalonia does not know ("Del") must cost the
+    /// hint, never the menu (an exception here used to close the app on right-click).
+    /// </summary>
+    internal static KeyGesture? ParseGesture(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        try { return KeyGesture.Parse(text); }
+        catch (ArgumentException) { return null; }
+    }
+
     private static List<Control> Build(IReadOnlyList<MenuAction> actions)
     {
         var items = new List<Control>();
@@ -36,7 +47,7 @@ public static class MenuPresenter
         {
             if (a.IsSeparator) { items.Add(new Separator()); continue; }
             var mi = new MenuItem { Header = a.Header };
-            if (a.Gesture is not null) mi.InputGesture = KeyGesture.Parse(a.Gesture);
+            if (ParseGesture(a.Gesture) is { } gesture) mi.InputGesture = gesture;
             if (a.Children is { } children) mi.ItemsSource = Build(children);
             else
             {

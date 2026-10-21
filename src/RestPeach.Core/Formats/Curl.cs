@@ -155,7 +155,9 @@ public static class Curl
         {
             var body = string.Join('&', data);
             var trimmed = body.TrimStart();
-            if (json || contentType.Contains("json") || (contentType.Length == 0 && (trimmed.StartsWith('{') || trimmed.StartsWith('['))))
+            if ((json || contentType.Contains("json") || contentType.Length == 0) && GraphQLBody(body) is { } gql)
+                r.Body = gql;
+            else if (json || contentType.Contains("json") || (contentType.Length == 0 && (trimmed.StartsWith('{') || trimmed.StartsWith('['))))
                 r.Body = new BodySpec { Type = BodyTypes.Json, Data = Text.CanonicalJson.Pretty(body) ?? body };
             else if (contentType.Contains("xml")) r.Body = new BodySpec { Type = BodyTypes.Xml, Data = body };
             else if (contentType.Contains("html")) r.Body = new BodySpec { Type = BodyTypes.Html, Data = body };
@@ -171,6 +173,20 @@ public static class Curl
         r.Headers = headers;
         r.Name = SuggestName(r.Method, r.Url);
         return r;
+    }
+
+    /// <summary>A JSON body that is one GraphQL operation ({"query": "…", "variables": {…}}), as browsers copy it.</summary>
+    private static BodySpec? GraphQLBody(string body)
+    {
+        try
+        {
+            if (Text.CanonicalJson.Parse(body) is not System.Text.Json.Nodes.JsonObject o || o["query"] is not System.Text.Json.Nodes.JsonValue q
+                || !q.TryGetValue<string>(out var query) || o.Any(p => p.Key is not ("query" or "variables" or "operationName")))
+                return null;
+            var vars = o["variables"] is System.Text.Json.Nodes.JsonObject { Count: > 0 } v ? Text.CanonicalJson.Pretty(v.ToJsonString()) ?? "" : "";
+            return new BodySpec { Type = BodyTypes.GraphQL, Data = query, Variables = vars };
+        }
+        catch (System.Text.Json.JsonException) { return null; }
     }
 
     private static (string User, string Pass)? DecodeBasic(string b64)

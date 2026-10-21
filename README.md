@@ -85,13 +85,13 @@ Sin invitaciones, sin cuentas, sin telemetría. Es un único `.exe` portable, en
 | Área | Qué incluye |
 |---|---|
 | **Proyectos** | Lista persistente, favoritos ★, grupos plegables (compartidos con el resto de la familia Peach), escaneo de carpetas, arrastrar y soltar, varias pestañas que se restauran al reiniciar. |
-| **Peticiones** | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS. Params sincronizados con la URL, headers, body JSON / texto / XML / HTML / form-data (con archivos) / x-www-form-urlencoded, notas. Pegar un comando cURL en la URL lo importa. |
+| **Peticiones** | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS. Params sincronizados con la URL, headers, body JSON / GraphQL (query + variables) / texto / XML / HTML / form-data (con archivos) / x-www-form-urlencoded, notas. GraphQL, JSON-RPC y SOAP se reconocen (GQL, RPC, SOAP en el árbol) y la respuesta se explica en sus términos: errores con status 200, Faults, eventos SSE. Pegar un comando cURL en la URL lo importa. |
 | **Respuesta** | Estado, tiempo y tamaño; body con colores y formato (JSON y XML), imágenes, headers, cookies; búsqueda (Ctrl+F); copiar y guardar. |
 | **Variables** | `{{NOMBRE}}` en capas: colección < carpetas < entorno < secretos < valores capturados en la sesión. Dinámicas: `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`. Panel lateral con el origen de cada valor. |
 | **Auth** | Heredar, ninguna, Bearer, Basic, API key (header o query). Se define en la colección o en una carpeta y la heredan las peticiones de abajo. |
 | **Pruebas** | Declarativas, una por línea, sobre estado, tiempo, tamaño, headers, body y JSONPath; capturas con `set` para encadenar peticiones. |
 | **Ejecución** | Una carpeta o toda la colección, en orden, con "detener en el primer fallo". Cada resultado muestra sus pruebas, la respuesta (body y headers) y lo que se envió (URL final, headers, body). |
-| **Importar** | Postman 2.1, Insomnia 4, OpenAPI 3.0/3.1 (JSON o YAML), cURL. Avisa de lo que no pudo conservar (scripts, auth no soportada…). |
+| **Importar** | Postman 2.1, Insomnia 4, OpenAPI 3.0/3.1 (JSON o YAML), cURL. Conserva el orden de la colección, convierte los tests habituales de Postman (`pm.expect(...)`, `pm.collectionVariables.set`) a pruebas declarativas y avisa de lo que no pudo conservar (scripts pre-request, auth no soportada…). |
 | **Exportar** | Colección de Postman, documento OpenAPI y script de bash con `curl`. Cada petición se copia como cURL (Ctrl+Shift+C). |
 | **Git** | Rama y cambios dentro de `.api/` en la barra de estado; `.gitignore` y `.gitattributes` correctos desde el primer momento. Las acciones de git quedan para GitPeach. |
 | **Disco** | Un *watcher* recarga el árbol y los entornos cuando algo cambia afuera (un `git pull`, otro editor, un agente de IA). |

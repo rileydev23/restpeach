@@ -26,6 +26,9 @@ public static class CanonicalJson
         CommentHandling = JsonCommentHandling.Skip,
     };
 
+    /// <summary>For one value (a JSON string literal) with the same readable escaping as the files.</summary>
+    public static readonly JsonSerializerOptions StringOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
     public static JsonNode? Parse(string text) => JsonNode.Parse(text, documentOptions: ReadOptions);
 
     public static string Write(JsonNode? node)

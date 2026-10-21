@@ -149,7 +149,11 @@ public sealed class Workspace
 
     // ------------------------------------------------------------ tree
 
-    /// <summary>Folders first, then requests; each alphabetical ignoring case. Tool folders and settings are hidden.</summary>
+    /// <summary>
+    /// The items listed in the folder's <c>order</c> first, in that order (imports keep the order of the original
+    /// collection); then the rest: folders before requests, each in natural order ("2." before "10.") ignoring case.
+    /// Tool folders and settings are hidden.
+    /// </summary>
     public List<WorkspaceItem> ListChildren(string relDir)
     {
         var list = new List<WorkspaceItem>();
@@ -157,19 +161,66 @@ public sealed class Workspace
         if (!Directory.Exists(dir)) return list;
         try
         {
-            foreach (var sub in Directory.EnumerateDirectories(dir).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            foreach (var sub in Directory.EnumerateDirectories(dir).OrderBy(Path.GetFileName, NaturalComparer.Instance))
             {
                 var name = Path.GetFileName(sub);
                 if (name.StartsWith('.') || (relDir.Length == 0 && name.Equals(EnvironmentsDir, StringComparison.OrdinalIgnoreCase))) continue;
                 list.Add(new WorkspaceItem(Join(relDir, name), name, true));
             }
-            foreach (var file in Directory.EnumerateFiles(dir).Where(f => IsRequestFile(f)).OrderBy(NameOf, StringComparer.OrdinalIgnoreCase))
+            foreach (var file in Directory.EnumerateFiles(dir).Where(f => IsRequestFile(f)).OrderBy(NameOf, NaturalComparer.Instance))
                 list.Add(new WorkspaceItem(Join(relDir, Path.GetFileName(file)), NameOf(file), false));
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
-        return list;
+
+        var order = OrderOf(relDir);
+        if (order.Count == 0) return list;
+        var rank = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < order.Count; i++) rank.TryAdd(order[i], i);
+        int Rank(WorkspaceItem item) => rank.TryGetValue(item.RelPath[(item.RelPath.LastIndexOf('/') + 1)..], out var r) ? r : int.MaxValue;
+        // OrderBy is stable: unlisted items keep their sorted place after the listed ones.
+        return list.OrderBy(Rank).ToList();
     }
+
+    /// <summary>The <c>order</c> of a folder (or, for the root, of config.json).</summary>
+    public List<string> OrderOf(string relDir) => relDir.Length == 0 ? LoadConfig().Order : LoadFolder(relDir).Order;
+
+    /// <summary>Writes the <c>order</c> of a folder; an empty list removes it.</summary>
+    public void SaveOrder(string relDir, List<string> order)
+    {
+        if (relDir.Length == 0)
+        {
+            var c = LoadConfig();
+            c.Order = order;
+            SaveConfig(c);
+        }
+        else
+        {
+            var f = LoadFolder(relDir);
+            f.Order = order;
+            SaveFolder(relDir, f);
+        }
+    }
+
+    /// <summary>
+    /// Keeps the parent's <c>order</c> pointing at an item that was renamed (<paramref name="newName"/>) or moved out
+    /// (null). Folders without an order are left alone.
+    /// </summary>
+    private void Reorder(string relDir, string oldName, string? newName)
+    {
+        try
+        {
+            var order = OrderOf(relDir);
+            int i = order.FindIndex(n => n.Equals(oldName, StringComparison.OrdinalIgnoreCase));
+            if (i < 0) return;
+            if (newName is null) order.RemoveAt(i);
+            else order[i] = newName;
+            SaveOrder(relDir, order);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
+    private static string LeafOf(string rel) => rel[(rel.LastIndexOf('/') + 1)..];
 
     /// <summary>Every request under <paramref name="relDir"/> (depth-first, in tree order).</summary>
     public List<string> ListRequests(string relDir = "")
@@ -242,7 +293,11 @@ public sealed class Workspace
         if (!string.Equals(target, rel, StringComparison.OrdinalIgnoreCase) && File.Exists(FullPath(target)))
             target = UniqueFile(dir, SafeFileName(newName), suffix);
         SaveRequest(rel, r);
-        if (!string.Equals(target, rel, StringComparison.Ordinal)) File.Move(FullPath(rel), FullPath(target));
+        if (!string.Equals(target, rel, StringComparison.Ordinal))
+        {
+            File.Move(FullPath(rel), FullPath(target));
+            Reorder(dir, LeafOf(rel), LeafOf(target));
+        }
         return target;
     }
 
@@ -253,6 +308,7 @@ public sealed class Workspace
         if (!string.Equals(target, rel, StringComparison.OrdinalIgnoreCase) && Directory.Exists(FullPath(target)))
             throw new IOException(target);
         Directory.Move(FullPath(rel), FullPath(target));
+        Reorder(ParentOf(rel), LeafOf(rel), LeafOf(target));
         return target;
     }
 
@@ -280,6 +336,7 @@ public sealed class Workspace
             if (File.Exists(FullPath(target))) target = UniqueFile(targetDir, NameOf(name), SuffixOf(name));
             File.Move(FullPath(rel), FullPath(target));
         }
+        Reorder(ParentOf(rel), name, null);
         return target;
     }
 

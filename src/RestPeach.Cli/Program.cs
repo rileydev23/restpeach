@@ -3,6 +3,7 @@ using System.Text;
 using RestPeach.Core;
 using RestPeach.Core.Formats;
 using RestPeach.Core.Http;
+using RestPeach.Core.Model;
 using RestPeach.Core.Storage;
 
 namespace RestPeach.Cli;
@@ -176,6 +177,10 @@ internal static class Program
         var status = $"{res.Status} {res.Reason}";
         var statusColor = res.Status < 300 ? Green : res.Status < 400 ? Amber : Red;
         Console.WriteLine($"  {mark} {name}{Paint(status.PadRight(22), statusColor)}{ResponseFormatter.Duration(res.ElapsedMs),9}  {Paint(ResponseFormatter.Size(res.Size), Dim)}");
+        // A GraphQL or JSON-RPC error with a 200 is worth a line even when the tests pass.
+        foreach (var i in ProtocolInsight.Describe(r.Sent?.Kind ?? ApiKind.Rest, res))
+            if (verbose || i.Level is InsightLevel.Error or InsightLevel.Warning)
+                Console.WriteLine("      " + Paint("» " + i.Text, i.Level == InsightLevel.Error ? Red : i.Level == InsightLevel.Warning ? Amber : Dim));
         foreach (var x in r.Assertions)
         {
             if (x.Passed && !verbose) continue;

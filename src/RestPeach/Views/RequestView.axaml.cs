@@ -21,7 +21,7 @@ public partial class RequestView : UserControl
 {
     private RequestTab? _tab;
     private ViewerSettings? _settings;
-    private TextMate.Installation? _bodyTm, _responseTm;
+    private TextMate.Installation? _bodyTm, _responseTm, _variablesTm;
     private string? _bodyExt, _responseExt;
 
     public RequestView()
@@ -29,7 +29,9 @@ public partial class RequestView : UserControl
         InitializeComponent();
         Configure(BodyEditor, readOnly: false);
         Configure(ResponseEditor, readOnly: true);
+        Configure(VariablesEditor, readOnly: false);
         SearchPanel.Install(BodyEditor);
+        SearchPanel.Install(VariablesEditor);
         SearchPanel.Install(ResponseEditor);
         DataContextChanged += (_, _) => Attach();
         AttachedToVisualTree += (_, _) => AttachSettings();
@@ -75,7 +77,7 @@ public partial class RequestView : UserControl
     private void ApplySettings()
     {
         if (_settings is null) return;
-        foreach (var e in new[] { BodyEditor, ResponseEditor })
+        foreach (var e in new[] { BodyEditor, ResponseEditor, VariablesEditor })
         {
             e.FontSize = _settings.FontSize - 1;
             e.WordWrap = _settings.WordWrap;
@@ -100,8 +102,11 @@ public partial class RequestView : UserControl
 
         BodyEditor.Document = _tab.BodyDocument;
         ResponseEditor.Document = _tab.ResponseDocument;
+        VariablesEditor.Document = _tab.VariablesDocument;
+        _variablesTm = Install(VariablesEditor, _variablesTm, ".json");
         _bodyExt = _responseExt = null;
         ApplyBodyGrammar();
+        ApplyBodyLayout();
         ApplyResponseGrammar();
         AttachSettings();
     }
@@ -111,7 +116,20 @@ public partial class RequestView : UserControl
         if (e.PropertyName == nameof(RequestTab.ResponseExtension)) ApplyResponseGrammar();
     }
 
-    private void OnBodyTypeChanged() => ApplyBodyGrammar();
+    private void OnBodyTypeChanged()
+    {
+        ApplyBodyGrammar();
+        ApplyBodyLayout();
+    }
+
+    /// <summary>GraphQL shares the body area between the query (3/5) and its variables (2/5); other bodies use all of it.</summary>
+    private void ApplyBodyLayout()
+    {
+        if (_tab is null) return;
+        var gql = _tab.IsGraphQLBody;
+        BodyGrid.RowDefinitions[1].Height = new GridLength(3, GridUnitType.Star);
+        BodyGrid.RowDefinitions[3].Height = new GridLength(gql ? 2 : 0, GridUnitType.Star);
+    }
 
     private void OnResponseChanged()
     {

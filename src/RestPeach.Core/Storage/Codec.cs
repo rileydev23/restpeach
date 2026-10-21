@@ -13,7 +13,7 @@ public static class Codec
     // ------------------------------------------------------------ requests
 
     private static readonly HashSet<string> RequestKeys = new(StringComparer.Ordinal)
-        { "name", "method", "url", "description", "headers", "disabledParams", "auth", "body", "tests" };
+        { "name", "method", "url", "description", "headers", "disabledParams", "auth", "body", "tests", "followRedirects" };
 
     public static ApiRequest ReadRequest(JsonNode? node, string fallbackName)
     {
@@ -29,6 +29,7 @@ public static class Codec
             Auth = ReadAuth(o.Obj("auth")),
             Body = ReadBody(o["body"]),
             Tests = (o.Arr("tests") ?? new JsonArray()).Select(t => t.Scalar() ?? "").Where(t => t.Length > 0).ToList(),
+            FollowRedirects = o["followRedirects"] is JsonValue fr && fr.TryGetValue<bool>(out var follow) ? follow : null,
             Extra = Leftovers(o, RequestKeys),
         };
         if (r.Name.Length == 0) r.Name = fallbackName;
@@ -48,6 +49,7 @@ public static class Codec
         if (!r.Auth.IsInherit) o["auth"] = WriteAuth(r.Auth);
         if (r.Body.Type != BodyTypes.None) o["body"] = WriteBody(r.Body);
         if (r.Tests.Count > 0) o["tests"] = new JsonArray(r.Tests.Select(t => (JsonNode)JsonValue.Create(t)!).ToArray());
+        if (r.FollowRedirects is { } follow) o["followRedirects"] = follow;
         return o;
     }
 
@@ -127,29 +129,52 @@ public static class Codec
         if (type is "formdata" or "multipart") type = BodyTypes.FormData;
         if (type is "form" or "x-www-form-urlencoded") type = BodyTypes.UrlEncoded;
         if (!BodyTypes.All.Contains(type)) type = BodyTypes.Text;
+        if (type == BodyTypes.GraphQL)
+            return new BodySpec { Type = type, Data = Text(o["query"] ?? o["data"]), Variables = Text(o["variables"]) };
         // "data" may be written by hand as a real JSON object instead of a string: keep it readable.
-        var dataNode = o["data"];
-        var data = dataNode switch
-        {
-            null => "",
-            JsonValue v when v.TryGetValue<string>(out var s) => s,
-            _ => CanonicalJson.Pretty(dataNode.ToJsonString()) ?? dataNode.ToJsonString(),
-        };
-        return new BodySpec { Type = type, Data = data, Fields = ReadRows(o.Arr("fields")) };
+        return new BodySpec { Type = type, Data = Text(o["data"]), Fields = ReadRows(o.Arr("fields")) };
     }
+
+    /// <summary>A string as is; a JSON object or array (written by hand, or GraphQL variables) re-indented.</summary>
+    private static string Text(JsonNode? node) => node switch
+    {
+        null => "",
+        JsonValue v when v.TryGetValue<string>(out var s) => s,
+        _ => CanonicalJson.Pretty(node.ToJsonString()) ?? node.ToJsonString(),
+    };
 
     public static JsonObject WriteBody(BodySpec b)
     {
         var o = new JsonObject { ["type"] = b.Type };
-        if (BodyTypes.IsForm(b.Type)) o["fields"] = WriteRows(b.Fields);
+        if (b.Type == BodyTypes.GraphQL)
+        {
+            o["query"] = b.Data;
+            if (GraphQLVariables(b.Variables) is { } vars) o["variables"] = vars;
+        }
+        else if (BodyTypes.IsForm(b.Type)) o["fields"] = WriteRows(b.Fields);
         else o["data"] = b.Data;
         return o;
+    }
+
+    /// <summary>
+    /// GraphQL variables as stored: a real JSON object when they parse (readable in a diff), the text otherwise
+    /// (<c>"id": {{ID}}</c> is not JSON until expanded), nothing when empty.
+    /// </summary>
+    private static JsonNode? GraphQLVariables(string text)
+    {
+        if (text.Trim().Length == 0) return null;
+        try
+        {
+            var node = CanonicalJson.Parse(text);
+            return node is JsonObject { Count: 0 } ? null : node;
+        }
+        catch (System.Text.Json.JsonException) { return text; }
     }
 
     // ------------------------------------------------------------ settings
 
     private static readonly HashSet<string> ConfigKeys = new(StringComparer.Ordinal)
-        { "name", "defaultEnvironment", "auth", "variables", "timeoutMs", "followRedirects", "verifyTls" };
+        { "name", "defaultEnvironment", "auth", "variables", "timeoutMs", "followRedirects", "verifyTls", "order" };
 
     public static WorkspaceConfig ReadConfig(JsonNode? node)
     {
@@ -165,6 +190,7 @@ public static class Codec
             TimeoutMs = Math.Clamp(o.Int("timeoutMs", 30000), 100, 3_600_000),
             FollowRedirects = o.Bool("followRedirects", true),
             VerifyTls = o.Bool("verifyTls", true),
+            Order = ReadNames(o.Arr("order")),
             Extra = Leftovers(o, ConfigKeys),
         };
     }
@@ -179,15 +205,16 @@ public static class Codec
         o["timeoutMs"] = c.TimeoutMs;
         o["followRedirects"] = c.FollowRedirects;
         o["verifyTls"] = c.VerifyTls;
+        if (c.Order.Count > 0) o["order"] = WriteNames(c.Order);
         return o;
     }
 
-    private static readonly HashSet<string> FolderKeys = new(StringComparer.Ordinal) { "auth", "variables" };
+    private static readonly HashSet<string> FolderKeys = new(StringComparer.Ordinal) { "auth", "variables", "order" };
 
     public static FolderConfig ReadFolder(JsonNode? node)
     {
         var o = node as JsonObject ?? new JsonObject();
-        return new FolderConfig { Auth = ReadAuth(o.Obj("auth")), Variables = ReadMap(o.Obj("variables")), Extra = Leftovers(o, FolderKeys) };
+        return new FolderConfig { Auth = ReadAuth(o.Obj("auth")), Variables = ReadMap(o.Obj("variables")), Order = ReadNames(o.Arr("order")), Extra = Leftovers(o, FolderKeys) };
     }
 
     public static JsonObject WriteFolder(FolderConfig f)
@@ -195,6 +222,7 @@ public static class Codec
         var o = (JsonObject)f.Extra.DeepClone();
         if (!f.Auth.IsInherit) o["auth"] = WriteAuth(f.Auth);
         if (f.Variables.Count > 0) o["variables"] = WriteMap(f.Variables);
+        if (f.Order.Count > 0) o["order"] = WriteNames(f.Order);
         return o;
     }
 
@@ -228,6 +256,12 @@ public static class Codec
         foreach (var (k, v) in map) if (k.Length > 0) o[k] = v;
         return o;
     }
+
+    private static List<string> ReadNames(JsonArray? a) =>
+        (a ?? new JsonArray()).Select(n => n.Scalar() ?? "").Where(n => n.Length > 0).ToList();
+
+    private static JsonArray WriteNames(IEnumerable<string> names) =>
+        new(names.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
 
     private static JsonObject Leftovers(JsonObject o, HashSet<string> known)
     {

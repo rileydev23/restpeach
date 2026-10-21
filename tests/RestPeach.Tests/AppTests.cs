@@ -108,6 +108,15 @@ public class AppTests
     }
 
     [Fact]
+    public void Menu_shortcut_hints_never_break_the_menu()
+    {
+        // "Del" is not an Avalonia key: it used to throw while building the tree's context menu and close the app.
+        Assert.Null(RestPeach.Views.MenuPresenter.ParseGesture("Del"));
+        foreach (var g in new[] { "Delete", "F2", "Ctrl+N", "Ctrl+Shift+N", "Ctrl+Enter", "Ctrl+Shift+C", "Ctrl+D" })
+            Assert.NotNull(RestPeach.Views.MenuPresenter.ParseGesture(g));
+    }
+
+    [Fact]
     public void Shortcuts_have_texts()
     {
         foreach (var (_, items) in Shortcuts.Groups)

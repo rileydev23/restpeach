@@ -12,6 +12,11 @@ public sealed class ImportedFolder
     public FolderConfig Config { get; set; } = new();
     public List<ImportedFolder> Folders { get; } = new();
     public List<ApiRequest> Requests { get; } = new();
+    /// <summary>Folders and requests as the source listed them (Postman runs them in this order); filled by <see cref="Add(ApiRequest)"/>.</summary>
+    public List<object> InOrder { get; } = new();
+
+    public void Add(ApiRequest r) { Requests.Add(r); InOrder.Add(r); }
+    public void Add(ImportedFolder f) { Folders.Add(f); InOrder.Add(f); }
 
     public int CountRequests() => Requests.Count + Folders.Sum(f => f.CountRequests());
 }
@@ -79,13 +84,38 @@ public static class Importer
     public static ImportSummary Write(Workspace ws, ImportResult result, string parentRel)
     {
         int requests = 0, folders = 0, created = 0, merged = 0;
+
+        // Writes the children of f into rel and, when the source had an order of its own, keeps it in "order".
+        void WriteChildren(ImportedFolder f, string rel)
+        {
+            var items = f.InOrder.Count > 0 ? f.InOrder : f.Folders.Cast<object>().Concat(f.Requests).ToList();
+            var names = new List<string>();
+            foreach (var item in items)
+            {
+                var written = item switch
+                {
+                    ApiRequest r => ws.CreateRequest(rel, r),
+                    ImportedFolder sub => WriteFolder(sub, rel),
+                    _ => null,
+                };
+                if (item is ApiRequest) requests++;
+                if (written is not null) names.Add(written[(written.LastIndexOf('/') + 1)..]);
+            }
+            // Only when it says something the sorted listing would not (folders first, then natural order).
+            if (f.InOrder.Count > 1 && !names.SequenceEqual(ws.ListChildren(rel).Select(c => c.RelPath[(c.RelPath.LastIndexOf('/') + 1)..])))
+            {
+                var order = ws.OrderOf(rel);
+                order.AddRange(names.Where(n => !order.Contains(n, StringComparer.OrdinalIgnoreCase)));
+                ws.SaveOrder(rel, order);
+            }
+        }
+
         string WriteFolder(ImportedFolder f, string parent)
         {
             var rel = ws.CreateFolder(parent, f.Name.Length > 0 ? f.Name : "Import");
             folders++;
             if (!f.Config.IsEmpty) ws.SaveFolder(rel, f.Config);
-            foreach (var r in f.Requests) { ws.CreateRequest(rel, r); requests++; }
-            foreach (var sub in f.Folders) WriteFolder(sub, rel);
+            WriteChildren(f, rel);
             return rel;
         }
 

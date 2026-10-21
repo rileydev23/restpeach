@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RestPeach.Controls;
+using RestPeach.Core.Model;
 using RestPeach.Core.Storage;
 using RestPeach.Services;
 
@@ -16,6 +17,7 @@ public sealed partial class TreeNode : ObservableObject
     public required string RelPath { get; init; }
     public required bool IsFolder { get; init; }
     public string Method { get; init; } = "";
+    public ApiKind Kind { get; init; } = ApiKind.Rest;
     public ObservableCollection<TreeNode> Children { get; } = new();
 
     [ObservableProperty] private bool _isExpanded;
@@ -25,13 +27,14 @@ public sealed partial class TreeNode : ObservableObject
 
     public bool IsRequest => !IsFolder;
     public string Glyph => IsFolder ? "■" : "";
-    public string MethodTag => IsFolder ? "" : Look.MethodTag(Method);
-    public IBrush MethodBrush => Look.Method(Method);
+    public string MethodTag => IsFolder ? "" : Look.Tag(Method, Kind);
+    public IBrush MethodBrush => Look.TagBrush(Method, Kind);
     public IBrush Foreground => GitLook.NameBrush(Change);
     public string StatusText => GitLook.Letter(Change, IsFolder);
     public IBrush StatusBrush => GitLook.Brush(Change);
     public bool HasStatus => StatusText.Length > 0;
-    public string StatusTip => GitLook.Describe(Change) is { Length: > 0 } d ? $"{RelPath} · {d}" : RelPath;
+    public string StatusTip => (IsFolder || Kind == ApiKind.Rest ? RelPath : $"{ApiKinds.Name(Kind)} · {Method} · {RelPath}")
+                               + (GitLook.Describe(Change) is { Length: > 0 } d ? " · " + d : "");
 
     public IEnumerable<TreeNode> Descendants()
     {
@@ -45,19 +48,26 @@ public sealed partial class TreeNode : ObservableObject
     private static readonly Regex JsonMethod = new("\"method\"\\s*:\\s*\"([A-Za-z]+)\"", RegexOptions.Compiled);
     private static readonly Regex YamlMethod = new(@"^method:\s*['""]?([A-Za-z]+)", RegexOptions.Compiled | RegexOptions.Multiline);
 
-    /// <summary>The method without parsing the whole file (the tree lists hundreds of them).</summary>
-    public static string PeekMethod(string fullPath)
+    /// <summary>
+    /// Method and API style of a request file. The whole file is read: keys are sorted, so "method" comes after
+    /// "body", and a big body would hide it from a peek at the first bytes.
+    /// </summary>
+    public static (string Method, ApiKind Kind) Peek(string fullPath)
     {
+        string text;
+        try { text = File.ReadAllText(fullPath); }
+        catch { return ("", ApiKind.Rest); }
         try
         {
-            using var reader = new StreamReader(fullPath);
-            var buffer = new char[8192];
-            int n = reader.ReadBlock(buffer, 0, buffer.Length);
-            var head = new string(buffer, 0, n);
-            var m = (Workspace.IsYaml(fullPath) ? YamlMethod : JsonMethod).Match(head);
-            return m.Success ? m.Groups[1].Value.ToUpperInvariant() : "GET";
+            var r = Workspace.ParseRequest(text, fullPath);
+            return (r.Method, ApiKinds.Of(r));
         }
-        catch { return ""; }
+        catch
+        {
+            // Broken file (it opens with an error banner): still show its method if it can be found.
+            var m = (Workspace.IsYaml(fullPath) ? YamlMethod : JsonMethod).Match(text);
+            return (m.Success ? m.Groups[1].Value.ToUpperInvariant() : "GET", ApiKind.Rest);
+        }
     }
 
     /// <summary>Builds the whole tree (collections are small; this runs off the UI thread).</summary>
@@ -66,12 +76,14 @@ public sealed partial class TreeNode : ObservableObject
         var list = new List<TreeNode>();
         foreach (var item in ws.ListChildren(relDir))
         {
+            var (method, kind) = item.IsFolder ? ("", ApiKind.Rest) : Peek(ws.FullPath(item.RelPath));
             var node = new TreeNode
             {
                 Name = item.Name,
                 RelPath = item.RelPath,
                 IsFolder = item.IsFolder,
-                Method = item.IsFolder ? "" : PeekMethod(ws.FullPath(item.RelPath)),
+                Method = method,
+                Kind = kind,
             };
             if (item.IsFolder) foreach (var c in Build(ws, item.RelPath)) node.Children.Add(c);
             list.Add(node);

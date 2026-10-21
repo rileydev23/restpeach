@@ -12,6 +12,8 @@ public sealed class PreparedRequest
     /// <summary><see cref="BodyTypes"/> value.</summary>
     public string BodyType { get; init; } = BodyTypes.None;
     public string RawBody { get; init; } = "";
+    /// <summary>The style of API (a GraphQL body has already become JSON here).</summary>
+    public ApiKind Kind { get; init; } = ApiKind.Rest;
     /// <summary>Form fields (active only); file fields carry an absolute path.</summary>
     public List<KeyValue> Fields { get; } = new();
     /// <summary>Variables referenced but not defined anywhere.</summary>
@@ -37,12 +39,35 @@ public static class RequestPreparer
         var missing = new SortedSet<string>(StringComparer.Ordinal);
         string X(string s) => Interpolator.Expand(s, scope, missing, secretMask);
 
+        var method = string.IsNullOrWhiteSpace(req.Method) ? "GET" : req.Method.Trim().ToUpperInvariant();
+        var url = NormalizeUrl(X(req.Url.Trim()));
+        var bodyType = req.Body.Type;
+        var raw = BodyTypes.IsRaw(bodyType) ? X(req.Body.Data) : "";
+        if (bodyType == BodyTypes.GraphQL)
+        {
+            // GraphQL over HTTP: POST {"query", "variables"} as JSON, or the same two as query parameters for GET.
+            var query = X(req.Body.Data);
+            var variables = X(req.Body.Variables).Trim();
+            if (method is "GET" or "HEAD")
+            {
+                url = QueryString.Append(url, "query", Uri.EscapeDataString(query));
+                if (variables.Length > 0) url = QueryString.Append(url, "variables", Uri.EscapeDataString(variables));
+                bodyType = BodyTypes.None;
+            }
+            else
+            {
+                bodyType = BodyTypes.Json;
+                raw = GraphQLEnvelope(query, variables);
+            }
+        }
+
         var p = new PreparedRequest
         {
-            Method = string.IsNullOrWhiteSpace(req.Method) ? "GET" : req.Method.Trim().ToUpperInvariant(),
-            Url = NormalizeUrl(X(req.Url.Trim())),
-            BodyType = req.Body.Type,
-            RawBody = BodyTypes.IsRaw(req.Body.Type) ? X(req.Body.Data) : "",
+            Method = method,
+            Url = url,
+            BodyType = bodyType,
+            RawBody = raw,
+            Kind = ApiKinds.Of(req),
         };
         foreach (var h in req.Headers.Where(h => h.Active && h.Key.Trim().Length > 0))
             p.Headers.Add(new(X(h.Key.Trim()), X(h.Value)));
@@ -75,11 +100,27 @@ public static class RequestPreparer
             }
         }
         // multipart sets its own boundary, so only the other bodies get a default Content-Type.
-        if (req.Body.Type != BodyTypes.FormData && BodyTypes.DefaultContentType(req.Body.Type) is { } ct && !p.HasHeader("Content-Type"))
+        if (p.BodyType != BodyTypes.FormData && BodyTypes.DefaultContentType(p.BodyType) is { } ct && !p.HasHeader("Content-Type"))
             p.Headers.Add(new("Content-Type", ct));
 
         foreach (var m in missing) p.Missing.Add(m);
         return p;
+    }
+
+    /// <summary>
+    /// <c>{"query": …, "variables": …}</c>. Variables that are not valid JSON go in as typed, so the server's error
+    /// (not a silent rewrite) tells what is wrong with them.
+    /// </summary>
+    public static string GraphQLEnvelope(string query, string variables)
+    {
+        var sb = new StringBuilder("{\n  \"query\": ");
+        sb.Append(System.Text.Json.JsonSerializer.Serialize(query, Text.CanonicalJson.StringOptions));
+        if (variables.Length > 0)
+        {
+            var vars = Text.CanonicalJson.Pretty(variables)?.Replace("\n", "\n  ") ?? variables;
+            sb.Append(",\n  \"variables\": ").Append(vars);
+        }
+        return sb.Append("\n}").ToString();
     }
 
     /// <summary>"localhost:3000/x" → "http://localhost:3000/x": a scheme is needed and nobody types it.</summary>

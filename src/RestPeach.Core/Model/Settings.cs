@@ -15,6 +15,8 @@ public sealed class WorkspaceConfig
     public int TimeoutMs { get; set; } = 30000;
     public bool FollowRedirects { get; set; } = true;
     public bool VerifyTls { get; set; } = true;
+    /// <summary>Order of the items at the top of the collection (see <see cref="FolderConfig.Order"/>).</summary>
+    public List<string> Order { get; set; } = new();
     public JsonObject Extra { get; set; } = new();
 }
 
@@ -23,9 +25,14 @@ public sealed class FolderConfig
 {
     public AuthSpec Auth { get; set; } = new();
     public SortedDictionary<string, string> Variables { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>
+    /// File and folder names in the order to show and run them ("Login.req.json", "Users"). Imports keep the order of
+    /// the original collection this way (log in first, then use the token); names not listed follow, sorted.
+    /// </summary>
+    public List<string> Order { get; set; } = new();
     public JsonObject Extra { get; set; } = new();
 
-    public bool IsEmpty => Auth.IsInherit && Variables.Count == 0 && Extra.Count == 0;
+    public bool IsEmpty => Auth.IsInherit && Variables.Count == 0 && Order.Count == 0 && Extra.Count == 0;
 }
 
 /// <summary>An environment: public variables in <c>environments/&lt;stem&gt;.env.json</c>, secrets apart.</summary>
