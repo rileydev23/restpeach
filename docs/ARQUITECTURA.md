@@ -1,7 +1,9 @@
 # Arquitectura de RestPeach
 
-Cliente de APIs local y nativo de git, de la familia Peach (diseño en [DISENO.md](DISENO.md), formato de los
-archivos en [FORMATO.md](FORMATO.md)).
+<!-- peach-hijo: ARQUITECTURA v1.0 -->
+Cliente de APIs local y nativo de git (diseño en [DISENO.md](DISENO.md), formato de los archivos en
+[FORMATO.md](FORMATO.md)). Los servicios *comunes* (`PeachApps`, `SingleInstance`, `Loc`, `GitStatus`,
+`Highlighting`…) son iguales en GitPeach y TextPeach; si los cambias, avísalo en el *pull request*.
 
 Tres proyectos y una regla: **todo lo que no es pantalla vive en `RestPeach.Core`**, que no depende de
 Avalonia. La app y el CLI son dos caras del mismo núcleo, así que una colección se envía, se prueba y se
