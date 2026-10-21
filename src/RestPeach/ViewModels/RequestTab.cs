@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -47,6 +48,9 @@ public sealed record TestRow(string Glyph, IBrush Brush, string Line, string Det
 /// <summary>A line about the response in the terms of its API style (see <see cref="ProtocolInsight"/>).</summary>
 public sealed record InsightRow(string Text, IBrush Brush);
 
+/// <summary>One line of the WebSocket log: a message sent (↑) or received (↓), or what happened to the connection.</summary>
+public sealed record WsLogRow(string Time, string Glyph, IBrush Brush, string Preview, string Text, string Size, bool IsMessage);
+
 /// <summary>
 /// One request open in a tab: an editable copy of its file plus the last response. Nothing is written until Save
 /// (Ctrl+S); the dot in the title says there are unsaved changes. Sending uses what is on screen, saved or not.
@@ -87,6 +91,12 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     /// <summary>GraphQL variables (JSON); the query itself is <see cref="BodyDocument"/>.</summary>
     public TextDocument VariablesDocument { get; } = new();
     public TextDocument ResponseDocument { get; } = new();
+    /// <summary>The WebSocket message selected in the log, in full.</summary>
+    public TextDocument MessageDocument { get; } = new();
+    /// <summary>A WebSocket message is text: JSON (highlighted, "Format") or anything else.</summary>
+    public IReadOnlyList<Choice> MessageTypes { get; }
+    public ObservableCollection<WsLogRow> WsLog { get; } = new();
+    public ObservableCollection<WsMessage> SavedMessages { get; } = new();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MethodBrush))]
@@ -97,7 +107,8 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [NotifyPropertyChangedFor(nameof(IsRawBody), nameof(IsFormBody), nameof(IsNoBody), nameof(BodyExtension), nameof(IsGraphQLBody), nameof(IsEditorBody))]
     private Choice _bodyType;
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasKind), nameof(KindName), nameof(KindTip), nameof(KindBrush))]
+    [NotifyPropertyChangedFor(nameof(HasKind), nameof(KindName), nameof(KindTip), nameof(KindBrush), nameof(IsWebSocket), nameof(IsHttp),
+        nameof(CanSend), nameof(CanConnect), nameof(IsComposer), nameof(BodyTab), nameof(BodyExtension), nameof(ResponseTitle))]
     private ApiKind _kind;
     [ObservableProperty] private string _testsText = "";
     [ObservableProperty]
@@ -111,7 +122,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
 
     // ---- response
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanSend))]
+    [NotifyPropertyChangedFor(nameof(CanSend), nameof(CanConnect))]
     private bool _isSending;
     [ObservableProperty] private bool _hasResponse;
     [ObservableProperty] private string _statusText = "";
@@ -131,9 +142,22 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [NotifyPropertyChangedFor(nameof(HasInsights))]
     private IReadOnlyList<InsightRow> _insights = Array.Empty<InsightRow>();
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsBodyResponse), nameof(IsHeadersResponse), nameof(IsCookiesResponse), nameof(IsTestsResponse))]
+    [NotifyPropertyChangedFor(nameof(IsBodyResponse), nameof(IsHeadersResponse), nameof(IsCookiesResponse), nameof(IsTestsResponse), nameof(IsMessagesResponse))]
     private string _responseSection = "body";
     [ObservableProperty] private string _responseUrl = "";
+
+    // ---- WebSocket
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanConnect))]
+    private bool _wsConnected;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedWsRow))]
+    private WsLogRow? _selectedWsRow;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedSavedMessage))]
+    private WsMessage? _selectedSavedMessage;
+    [ObservableProperty] private string _messageExtension = ".txt";
+    private WebSocketSession? _session;
 
     private ApiResponse? _lastResponse;
 
@@ -142,12 +166,15 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     /// <summary>The view swaps the highlighting of the response editor when the body kind changes.</summary>
     public event Action? ResponseChanged;
     public event Action? BodyTypeChangedForView;
+    /// <summary>The view swaps the highlighting of the message viewer.</summary>
+    public event Action? MessageChanged;
 
     public RequestTab(ICollectionHost host, string relPath)
     {
         _host = host;
         RelPath = relPath;
         _bodyType = BodyTypes[0];
+        MessageTypes = BodyTypes.Where(b => b.Value is Core.Model.BodyTypes.Json or Core.Model.BodyTypes.Text).ToList();
         BodyFields.FileBase = host.Ws.ProjectRoot;
         ToolTip = relPath;
 
@@ -170,6 +197,14 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public bool IsGraphQLBody => BodyType.Value == Core.Model.BodyTypes.GraphQL;
     /// <summary>The body is edited as text (raw bodies, and the query of a GraphQL body).</summary>
     public bool IsEditorBody => IsRawBody || IsGraphQLBody;
+    public bool IsWebSocket => Kind == ApiKind.WebSocket;
+    public bool IsHttp => !IsWebSocket;
+    /// <summary>The body editor is on screen: a text body, or the message being written to a WebSocket.</summary>
+    public bool IsComposer => IsEditorBody || IsWebSocket;
+    public bool HasSelectedWsRow => SelectedWsRow is not null;
+    public bool HasSelectedSavedMessage => SelectedSavedMessage is not null;
+    public bool HasLog => WsLog.Count > 0;
+    public string ResponseTitle => IsWebSocket ? Loc.T("ws.connection") : Loc.T("rv.response");
     public bool HasInsights => Insights.Count > 0;
     public bool HasKind => Kind != ApiKind.Rest;
     public string KindName => ApiKinds.Name(Kind);
@@ -179,6 +214,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         ApiKind.GraphQL => Loc.T("kind.graphql.tip"),
         ApiKind.JsonRpc => Loc.T("kind.jsonrpc.tip"),
         ApiKind.Soap => Loc.T("kind.soap.tip"),
+        ApiKind.WebSocket => Loc.T("kind.ws.tip"),
         _ => "",
     };
 
@@ -198,7 +234,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         }
     }
 
-    public string BodyExtension => BodyType.Value switch
+    public string BodyExtension => IsWebSocket && BodyType.Value != Core.Model.BodyTypes.Json ? ".txt" : BodyType.Value switch
     {
         Core.Model.BodyTypes.Json => ".json",
         Core.Model.BodyTypes.GraphQL => ".graphql",
@@ -206,7 +242,8 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         Core.Model.BodyTypes.Html => ".html",
         _ => ".txt",
     };
-    public bool CanSend => !IsSending;
+    public bool CanSend => !IsSending && !IsWebSocket;
+    public bool CanConnect => IsWebSocket && !IsSending && !WsConnected;
 
     public bool IsParamsSection => Section == "params";
     public bool IsHeadersSection => Section == "headers";
@@ -218,15 +255,18 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public bool IsHeadersResponse => ResponseSection == "headers";
     public bool IsCookiesResponse => ResponseSection == "cookies";
     public bool IsTestsResponse => ResponseSection == "tests";
+    public bool IsMessagesResponse => ResponseSection == "messages";
 
     public string ParamsTab => Count(Loc.T("rv.params"), Params.ActiveCount);
     public string HeadersTab => Count(Loc.T("rv.headers"), Headers.ActiveCount);
     public string AuthTab => Auth.Summary.Length > 0 ? Loc.T("rv.auth") + " ●" : Loc.T("rv.auth");
-    public string BodyTab => IsNoBody ? Loc.T("rv.body") : Loc.T("rv.body") + " ●";
+    public string BodyTab => IsWebSocket ? Count(Loc.T("ws.message"), SavedMessages.Count)
+        : IsNoBody ? Loc.T("rv.body") : Loc.T("rv.body") + " ●";
     public string TestsTab => Count(Loc.T("rv.tests"), TestLines().Count(l => !Assertions.IsComment(l)));
     public string ResponseHeadersTab => Count(Loc.T("rv.headers"), ResponseHeaders.Count);
     public string ResponseCookiesTab => Count(Loc.T("rv.cookies"), ResponseCookies.Count);
     public string ResponseTestsTab => Count(Loc.T("rv.tests"), TestRows.Count);
+    public string WsLogTab => Count(Loc.T("ws.log"), WsLog.Count(r => r.IsMessage));
 
     private static string Count(string label, int n) => n > 0 ? $"{label} ({n})" : label;
 
@@ -256,7 +296,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         IsDirty = false;
         UpdateTitle();
         // A request with a body opens on the Body tab; the rest on Params.
-        Section = r.Body.Type != Core.Model.BodyTypes.None ? "body" : "params";
+        Section = r.Body.Type != Core.Model.BodyTypes.None || ApiKinds.IsWebSocket(r) ? "body" : "params";
     }
 
     private void Apply(ApiRequest r)
@@ -275,10 +315,14 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
             Headers.Load(r.Headers);
             Auth.Load(r.Auth);
             BodyType = BodyTypes.FirstOrDefault(b => b.Value == r.Body.Type) ?? BodyTypes[0];
+            // A WebSocket message is JSON or text; an empty one shows as text.
+            if (ApiKinds.IsWebSocket(r) && !MessageTypes.Contains(BodyType)) BodyType = MessageTypes[1];
             BodyDocument.Text = r.Body.Data;
             VariablesDocument.Text = r.Body.Variables;
             BodyFields.Load(r.Body.Fields);
             TestsText = string.Join("\n", r.Tests);
+            SavedMessages.Clear();
+            foreach (var m in r.Messages) SavedMessages.Add(m.Clone());
             _followRedirects = r.FollowRedirects;
             OnPropertyChanged(nameof(NoRedirects));
             Kind = ApiKinds.Of(r);
@@ -298,6 +342,13 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public ApiRequest BuildModel()
     {
         var all = Params.ToList();
+        var body = new BodySpec { Type = BodyType.Value, Data = BodyDocument.Text, Variables = VariablesDocument.Text, Fields = BodyFields.ToList() };
+        if (Method == ApiRequest.WebSocket || ApiKinds.IsWebSocketUrl(Url))
+        {
+            // The message being written: kept (and sent by collection runs) only when there is one.
+            body = BodyDocument.TextLength == 0 ? new BodySpec()
+                : new BodySpec { Type = BodyType.Value == Core.Model.BodyTypes.Json ? Core.Model.BodyTypes.Json : Core.Model.BodyTypes.Text, Data = BodyDocument.Text };
+        }
         return new ApiRequest
         {
             Name = _name,
@@ -307,9 +358,10 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
             Headers = Headers.ToList(),
             DisabledParams = all.Where(p => !p.Active).ToList(),
             Auth = Auth.ToModel(),
-            Body = new BodySpec { Type = BodyType.Value, Data = BodyDocument.Text, Variables = VariablesDocument.Text, Fields = BodyFields.ToList() },
+            Body = body,
             Tests = TestLines().ToList(),
             FollowRedirects = _followRedirects,
+            Messages = SavedMessages.Select(m => m.Clone()).ToList(),
             Extra = (JsonObject)_extra.DeepClone(),
         };
     }
@@ -322,12 +374,25 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         BadgeBrush = Look.TagBrush(value, Kind);
         OnPropertyChanged(nameof(KindBrush));
         Edited();
+        if (!_loading) Kind = ApiKinds.Of(BuildModel());
     }
 
     partial void OnKindChanged(ApiKind value)
     {
         Badge = Look.Tag(Method, value);
         BadgeBrush = Look.TagBrush(Method, value);
+        BodyTypeChangedForView?.Invoke();
+        if (value == ApiKind.WebSocket)
+        {
+            if (!MessageTypes.Contains(BodyType)) BodyType = MessageTypes[BodyType.Value == Core.Model.BodyTypes.None ? 1 : 0];
+            if (!_loading && !HasResponse) Section = "body";
+            if (ResponseSection is "body" or "tests") ResponseSection = "messages";
+        }
+        else
+        {
+            if (WsConnected) _ = _session?.CloseAsync();
+            if (ResponseSection == "messages") ResponseSection = "body";
+        }
     }
 
     partial void OnUrlChanged(string value)
@@ -339,6 +404,8 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
             Dispatcher.UIThread.Post(() => ApplyCurl(parsed));
             return;
         }
+        // Typing ws:// or wss:// makes it a WebSocket.
+        if (ApiKinds.IsWebSocketUrl(value) && Method != ApiRequest.WebSocket) Method = ApiRequest.WebSocket;
         if (!_syncingParams)
         {
             _syncingParams = true;
@@ -518,6 +585,13 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [RelayCommand]
     private async Task SendAsync()
     {
+        // Ctrl+Enter on a WebSocket: connect, then send the message being written.
+        if (IsWebSocket)
+        {
+            if (WsConnected) await SendMessageAsync(null);
+            else await ConnectAsync();
+            return;
+        }
         if (IsSending || LoadError is not null) return;
         var model = BuildModel();
         PreparedRequest prepared;
@@ -628,12 +702,213 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         return new CookieRow(eq < 0 ? nv.Trim() : nv[..eq].Trim(), eq < 0 ? "" : nv[(eq + 1)..].Trim(), parts.Length > 1 ? parts[1].Trim() : "");
     }
 
+    // ------------------------------------------------------------ WebSocket
+
+    private const int MaxLogRows = 5000;
+
+    /// <summary>Opens the connection. The log keeps what earlier connections said (Clear empties it).</summary>
+    private async Task ConnectAsync()
+    {
+        if (IsSending || WsConnected || LoadError is not null) return;
+        var model = BuildModel();
+        PreparedRequest prepared;
+        try { prepared = Runner.Prepare(_host.Ws, _host.Config, FolderRel, model, _host.CurrentEnvironment, _host.Runtime); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { _host.Notify(e.Message); return; }
+        if (prepared.Url.Length == 0) { _host.Notify(Loc.T("rv.noUrl")); FocusUrl(); return; }
+
+        var cts = _sendCts = new CancellationTokenSource();
+        IsSending = true;
+        _host.Notify(Loc.F("ws.connecting", prepared.Url));
+        try
+        {
+            var (session, handshake) = await WebSocketSession.ConnectAsync(prepared, HttpOptions.For(_host.Config, model), _host.Engine, cts.Token);
+            ShowHandshake(handshake, prepared.Url);
+            if (session is null)
+            {
+                Log(WsDirection.Error, handshake.Status > 0 ? Loc.F("ws.refused", handshake.Status, handshake.Error) : handshake.Error ?? "");
+                _host.Notify(Loc.F("rv.failed", handshake.Error));
+                return;
+            }
+            _session = session;
+            session.Event += e => Dispatcher.UIThread.Post(() => OnWsEvent(session, e));
+            session.Closed += text => Dispatcher.UIThread.Post(() => OnWsClosed(session, text));
+            WsConnected = true;
+            Log(WsDirection.Info, Loc.F("ws.connected", prepared.Url) + (handshake.SubProtocol is { Length: > 0 } sp ? " · " + sp : ""));
+            session.Start();
+            _host.Notify(Loc.F("ws.connectedIn", ResponseFormatter.Duration(handshake.ElapsedMs)));
+        }
+        catch (OperationCanceledException) { _host.Notify(Loc.T("rv.cancelled")); }
+        finally
+        {
+            if (_sendCts == cts) IsSending = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task DisconnectAsync()
+    {
+        if (_session is not { } session) return;
+        Log(WsDirection.Info, Loc.T("ws.closing"));
+        await session.CloseAsync();
+    }
+
+    /// <summary>Sends <paramref name="text"/> (by default, the message being written) with its variables expanded.</summary>
+    [RelayCommand]
+    private async Task SendMessageAsync(string? text)
+    {
+        text ??= BodyDocument.Text;
+        if (_session is not { IsOpen: true } session) { _host.Notify(Loc.T("ws.notConnected")); return; }
+        if (text.Length == 0) { _host.Notify(Loc.T("ws.emptyMessage")); return; }
+        var missing = new SortedSet<string>(StringComparer.Ordinal);
+        try
+        {
+            var scope = Runner.Scope(_host.Ws, _host.Config, FolderRel, _host.CurrentEnvironment, _host.Runtime);
+            text = Interpolator.Expand(text, scope, missing);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        if (missing.Count > 0) _host.Notify(Loc.F("rv.missing", string.Join(", ", missing)));
+        try { await session.SendAsync(text, CancellationToken.None); }
+        catch (Exception e) when (e is System.Net.WebSockets.WebSocketException or IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            Log(WsDirection.Error, e.Message);
+        }
+    }
+
+    /// <summary>A saved message, sent right away (double-click in the list).</summary>
+    public Task SendSavedAsync(WsMessage? m) => m is null ? Task.CompletedTask : SendMessageAsync(m.Data);
+
+    partial void OnSelectedSavedMessageChanged(WsMessage? value)
+    {
+        // Picking a saved message puts it in the editor, ready to change or send.
+        if (value is null || BodyDocument.Text == value.Data) return;
+        BodyDocument.Text = value.Data;
+        BodyType = LooksLikeJson(value.Data) ? MessageTypes[0] : MessageTypes[1];
+    }
+
+    private static bool LooksLikeJson(string s) =>
+        s.TrimStart() is { Length: > 0 } t && (t[0] == '{' || t[0] == '[') && Core.Text.CanonicalJson.Pretty(s) is not null;
+
+    /// <summary>Keeps the message being written in the request (named; a name already used is replaced).</summary>
+    [RelayCommand]
+    private async Task SaveMessageAsync()
+    {
+        var data = BodyDocument.Text;
+        if (data.Trim().Length == 0) { _host.Notify(Loc.T("ws.emptyMessage")); return; }
+        var name = await Dialogs.Prompt(Loc.T("ws.saveMessage"), Loc.T("ws.messageName"), SuggestName(data));
+        if (string.IsNullOrWhiteSpace(name)) return;
+        name = name.Trim();
+        var saved = new WsMessage { Name = name, Data = data };
+        int i = SavedMessages.ToList().FindIndex(m => m.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (i >= 0) SavedMessages[i] = saved;
+        else SavedMessages.Add(saved);
+        SelectedSavedMessage = saved;
+        Edited();
+    }
+
+    [RelayCommand]
+    private void RemoveMessage()
+    {
+        if (SelectedSavedMessage is not { } m || !SavedMessages.Remove(m)) return;
+        Edited();
+    }
+
+    /// <summary>{"type": "join", …} → "join": chat-like protocols name their messages in a field.</summary>
+    private static string SuggestName(string data)
+    {
+        var m = Regex.Match(data, @"""(?:type|action|event|op|method|cmd)""\s*:\s*""([^""]{1,40})""");
+        if (m.Success) return m.Groups[1].Value;
+        var oneLine = Regex.Replace(data.Trim(), @"\s+", " ");
+        return oneLine.Length <= 30 ? oneLine : oneLine[..30];
+    }
+
+    [RelayCommand]
+    private void ClearLog()
+    {
+        WsLog.Clear();
+        SelectedWsRow = null;
+        OnPropertyChanged(nameof(WsLogTab));
+        OnPropertyChanged(nameof(HasLog));
+    }
+
+    private void ShowHandshake(WsHandshake h, string url)
+    {
+        _lastResponse = null;
+        ResponseImage?.Dispose();
+        ResponseImage = null;
+        ResponseUrl = url;
+        ResponseError = null;
+        Insights = h.Ok ? Array.Empty<InsightRow>()
+            : new[] { new InsightRow(h.Status > 0 ? Loc.F("ws.refused", h.Status, h.Error) : h.Error ?? "", Palette.Red) };
+        StatusText = h.Ok ? Loc.T("ws.open") : h.Status > 0 ? h.Status.ToString() : Loc.T("rv.error");
+        StatusBrush = h.Ok ? Palette.OkBadge : Look.StatusBadge(h.Status, h.Status == 0);
+        TimeText = ResponseFormatter.Duration(h.ElapsedMs);
+        SizeText = "";
+        ResponseHeaders = h.Headers.Select(x => new HeaderRow(x.Key, x.Value)).ToList();
+        ResponseCookies = h.Headers.Where(x => x.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase)).Select(x => ParseCookie(x.Value)).ToList();
+        TestRows = Array.Empty<TestRow>();
+        TestsSummary = "";
+        OnPropertyChanged(nameof(ResponseHeadersTab));
+        OnPropertyChanged(nameof(ResponseCookiesTab));
+        HasResponse = true;
+        ResponseSection = "messages";
+    }
+
+    private void OnWsEvent(WebSocketSession session, WsEvent e)
+    {
+        var size = !e.IsMessage ? "" : e.Binary ? Loc.F("ws.binary", ResponseFormatter.Size(e.Size)) : ResponseFormatter.Size(e.Size);
+        Log(e.Direction, e.Text, e.At, size);
+        if (session == _session) SizeText = $"↑ {session.Sent}  ↓ {session.Received}";
+    }
+
+    private void OnWsClosed(WebSocketSession session, string text)
+    {
+        bool abnormal = RunResult.AbnormalClose(text);
+        var line = Loc.F("ws.closed", text, ResponseFormatter.Duration(session.Uptime.TotalMilliseconds));
+        Log(abnormal ? WsDirection.Error : WsDirection.Info, line);
+        if (session != _session) return;
+        _session = null;
+        WsConnected = false;
+        StatusText = Loc.F("ws.closedBadge", text);
+        StatusBrush = abnormal ? Palette.ServerErrorBadge : Palette.FileBg;
+        _host.Notify(line);
+        _ = session.DisposeAsync().AsTask();
+    }
+
+    private void Log(WsDirection d, string text, DateTimeOffset? at = null, string size = "")
+    {
+        var (glyph, brush) = d switch
+        {
+            WsDirection.Sent => ("↑", Palette.Blue),
+            WsDirection.Received => ("↓", Palette.Green),
+            WsDirection.Error => ("!", Palette.Red),
+            _ => ("•", Palette.Dim),
+        };
+        var preview = Regex.Replace(text.Length > 600 ? text[..600] : text, @"\s+", " ").Trim();
+        var row = new WsLogRow((at ?? DateTimeOffset.Now).ToString("HH:mm:ss.fff"), glyph, brush, preview, text, size, d is WsDirection.Sent or WsDirection.Received);
+        // A chatty socket (an event feed) can send thousands: the oldest lines go.
+        if (WsLog.Count >= MaxLogRows) WsLog.RemoveAt(0);
+        WsLog.Add(row);
+        OnPropertyChanged(nameof(WsLogTab));
+        OnPropertyChanged(nameof(HasLog));
+        HasResponse = true;
+    }
+
+    partial void OnSelectedWsRowChanged(WsLogRow? value)
+    {
+        var text = value?.Text ?? "";
+        var json = value is { IsMessage: true } && LooksLikeJson(text);
+        MessageExtension = json ? ".json" : ".txt";
+        MessageDocument.Text = json && _host.PrettyResponses ? Core.Text.CanonicalJson.Pretty(text) ?? text : text;
+        MessageChanged?.Invoke();
+    }
+
     // ------------------------------------------------------------ clipboard and files
 
     [RelayCommand]
     private async Task CopyCurlAsync()
     {
         if (Dialogs.Owner?.Clipboard is not { } cb) return;
+        if (IsWebSocket) { _host.Notify(Loc.T("ws.noCurl")); return; }
         var p = Prepare();
         await cb.SetTextAsync(Curl.Write(p));
         _host.Notify(Loc.T("rv.curlCopied"));
@@ -642,6 +917,13 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [RelayCommand]
     private async Task CopyResponseAsync()
     {
+        if (IsWebSocket)
+        {
+            if (Dialogs.Owner?.Clipboard is not { } clip || WsLog.Count == 0) return;
+            await clip.SetTextAsync(string.Join("\n", WsLog.Select(r => $"{r.Time} {r.Glyph} {r.Text}")));
+            _host.Notify(Loc.T("ws.logCopied"));
+            return;
+        }
         if (Dialogs.Owner?.Clipboard is not { } cb || _lastResponse is null) return;
         await cb.SetTextAsync(ResponseDocument.Text.Length > 0 ? ResponseDocument.Text : _lastResponse.Text);
         _host.Notify(Loc.T("rv.responseCopied"));
@@ -708,6 +990,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public void Dispose()
     {
         _sendCts?.Cancel();
+        if (_session is { } session) { _session = null; _ = session.DisposeAsync().AsTask(); }
         _dirtyTimer.Stop();
         ResponseImage?.Dispose();
     }

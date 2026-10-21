@@ -191,7 +191,7 @@ internal static class Program
             Console.WriteLine("      " + (x.Passed ? Paint("✓ " + line, Dim) : Paint("✗ " + line, Red)));
         }
         if (r.Assertions.Count == 0 && !r.Passed)
-            Console.WriteLine("      " + Paint(Loc.T("cli.httpError"), Red));
+            Console.WriteLine("      " + Paint(Loc.T(RunResult.AbnormalClose(res.WebSocketClose) ? "cli.wsClosed" : "cli.httpError"), Red));
     }
 
     private static string Shorten(string s) => s.Length <= 40 ? s : s[..37] + "...";

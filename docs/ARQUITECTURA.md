@@ -17,7 +17,7 @@ RestPeach (Avalonia, MVVM)          RestPeach.Cli (restpeach-cli)
                 RestPeach.Core
   Storage ── Workspace (la carpeta .api) · Codec (modelo ↔ JSON/YAML)
   Model ──── ApiRequest · AuthSpec · BodySpec · WorkspaceConfig · FolderConfig · ApiEnvironment
-  Http ───── VariableScope · RequestPreparer · HttpEngine · ResponseFormatter
+  Http ───── VariableScope · RequestPreparer · HttpEngine · WebSocketSession · ResponseFormatter
   Testing ── Assertions · JsonPath
   Formats ── Curl · Import (Postman, Insomnia, OpenAPI) · Export (Postman, OpenAPI, bash)
   Text ───── CanonicalJson · Yaml
@@ -35,6 +35,7 @@ RestPeach (Avalonia, MVVM)          RestPeach.Cli (restpeach-cli)
 | `AuthResolver` | Resuelve `inherit` subiendo por las carpetas hasta la colección. |
 | `RequestPreparer` | Pura: petición + auth + variables → `PreparedRequest` (método, URL final, headers, body). La usan el envío, la vista previa de cURL (con los secretos enmascarados) y los tests. |
 | `HttpEngine` | Envía un `PreparedRequest` con `HttpClient`: un motor por colección abierta, con su propio frasco de cookies en memoria. Mide el tiempo hasta el último byte y corta los bodies de más de 64 MB. |
+| `WebSocketSession` | Una conexión WebSocket (`ClientWebSocket`) cuyo *handshake* pasa por el mismo `SocketsHttpHandler` del `HttpEngine`: mismas cookies, TLS y conexión IPv4/IPv6. Los mensajes llegan por un evento desde un hilo de fondo; `Start()` empieza a leer después de suscribirse para no perder el saludo del servidor. `ProbeAsync` es la versión de las ejecuciones: conecta, envía, junta lo que llega hasta un silencio de 1 s y lo devuelve como un `ApiResponse` (101, body = array JSON) para que las pruebas de siempre funcionen. |
 | `Assertions` | Pruebas declarativas, una por línea, y capturas `set NOMBRE = …`. Sin motor de scripts. |
 | `Runner` | `SendAsync` / `RunAsync` / `RunAllAsync`: prepara, envía y evalúa exactamente como la app. Las capturas quedan en `Runtime` y las ven las peticiones siguientes. Devuelve `RunResult` (petición, lo enviado, la respuesta, las pruebas). |
 | `Import` / `Export` / `Curl` | Detectan el formato y convierten. Lo importado nunca sobrescribe; lo que no se pudo conservar se informa. |
@@ -68,6 +69,8 @@ MainWindowViewModel ─┬─ HomeViewModel (proyectos y grupos)
 3. **Enviar** usa lo que hay en pantalla (guardado o no): `Runner.SendAsync` → `HttpEngine` → `Assertions`.
 4. La respuesta se formatea fuera del hilo de la interfaz (`ResponseFormatter`) y se muestra; las capturas pasan
    al `Runtime` de la sesión y el panel de variables se actualiza.
+   Un WebSocket no tiene respuesta única: **Conectar** abre una `WebSocketSession` que vive en la pestaña; cada mensaje
+   (enviado, recibido, cierre) se agrega al registro en el hilo de la interfaz, con un tope de 5000 líneas.
 5. **Guardar** escribe con `Workspace` y marca la escritura como propia (`MarkOwnWrite`) para que el *watcher*
    no la trate como un cambio externo.
 

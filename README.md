@@ -86,6 +86,7 @@ Sin invitaciones, sin cuentas, sin telemetría. Es un único `.exe` portable, en
 |---|---|
 | **Proyectos** | Lista persistente, favoritos ★, grupos plegables (compartidos con el resto de la familia Peach), escaneo de carpetas, arrastrar y soltar, varias pestañas que se restauran al reiniciar. |
 | **Peticiones** | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS. Params sincronizados con la URL, headers, body JSON / GraphQL (query + variables) / texto / XML / HTML / form-data (con archivos) / x-www-form-urlencoded, notas. GraphQL, JSON-RPC y SOAP se reconocen (GQL, RPC, SOAP en el árbol) y la respuesta se explica en sus términos: errores con status 200, Faults, eventos SSE. Pegar un comando cURL en la URL lo importa. |
+| **WebSockets** | Método **WS** (o una URL `ws://` / `wss://`): Conectar, enviar mensajes (con `{{variables}}`) y ver el registro de lo enviado ↑ y recibido ↓ con hora y tamaño; el mensaje elegido se ve completo y con formato. Mensajes guardados con la petición para reenviarlos con doble clic. Headers, auth y cookies van en el handshake; el código de cierre del servidor se muestra. Al ejecutar la colección se conecta, envía el mensaje, junta las respuestas y evalúa las pruebas sobre ellas. |
 | **Respuesta** | Estado, tiempo y tamaño; body con colores y formato (JSON y XML), imágenes, headers, cookies; búsqueda (Ctrl+F); copiar y guardar. |
 | **Variables** | `{{NOMBRE}}` en capas: colección < carpetas < entorno < secretos < valores capturados en la sesión. Dinámicas: `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`. Panel lateral con el origen de cada valor. |
 | **Auth** | Heredar, ninguna, Bearer, Basic, API key (header o query). Se define en la colección o en una carpeta y la heredan las peticiones de abajo. |
@@ -294,7 +295,7 @@ En CI, los secretos se pasan con `--var` desde las variables protegidas del pipe
 | Texto mostrado | 16 MB | Lo que sobra no se muestra (se puede guardar completo). |
 | Timeout por defecto | 30 s | Configurable en **Ajustes** de la colección o con `--timeout`. |
 
-Otros: no hay scripts de pre/post-petición (a propósito: las pruebas son declarativas), ni WebSockets, gRPC
+Otros: no hay scripts de pre/post-petición (a propósito: las pruebas son declarativas), ni gRPC
 o GraphQL con esquema; el cambio de idioma requiere reiniciar; solo se publica para Windows x64 (Avalonia es
 multiplataforma, así que portarlo es posible).
 

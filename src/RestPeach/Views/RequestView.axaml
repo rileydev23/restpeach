@@ -4,6 +4,7 @@
              xmlns:vm="using:RestPeach.ViewModels"
              xmlns:views="using:RestPeach.Views"
              xmlns:ae="using:AvaloniaEdit"
+             xmlns:core="using:RestPeach.Core.Model"
              x:Class="RestPeach.Views.RequestView"
              x:DataType="vm:RequestTab">
   <DockPanel>
@@ -13,14 +14,18 @@
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="6,0,0,0">
           <Button Classes="accent" Content="{l:L rv.send}" Command="{Binding SendCommand}" IsVisible="{Binding CanSend}"
                   ToolTip.Tip="{l:L rv.send.tip}" MinWidth="84" HorizontalContentAlignment="Center" />
+          <Button Classes="accent" Content="{l:L ws.connect}" Command="{Binding SendCommand}" IsVisible="{Binding CanConnect}"
+                  ToolTip.Tip="{l:L ws.connect.tip}" MinWidth="84" HorizontalContentAlignment="Center" />
+          <Button Content="{l:L ws.disconnect}" Command="{Binding DisconnectCommand}" IsVisible="{Binding WsConnected}"
+                  ToolTip.Tip="{l:L ws.disconnect.tip}" MinWidth="84" HorizontalContentAlignment="Center" />
           <Button Content="{l:L rv.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding IsSending}" MinWidth="84" HorizontalContentAlignment="Center" />
           <Button Content="{l:L common.save}" Command="{Binding SaveCommand}" IsEnabled="{Binding IsDirty}" ToolTip.Tip="Ctrl+S" />
           <Button Content="⋯" Padding="10,4" ToolTip.Tip="{l:L rv.more.tip}">
             <Button.Flyout>
               <MenuFlyout Placement="BottomEdgeAlignedRight">
-                <MenuItem Header="{l:L rv.copyCurl}" Command="{Binding CopyCurlCommand}" InputGesture="Ctrl+Shift+C" />
+                <MenuItem Header="{l:L rv.copyCurl}" Command="{Binding CopyCurlCommand}" InputGesture="Ctrl+Shift+C" IsVisible="{Binding IsHttp}" />
                 <MenuItem Header="{l:L rv.reveal}" Command="{Binding RevealInTreeCommand}" />
-                <MenuItem Header="{l:L rv.noRedirects}" ToggleType="CheckBox" IsChecked="{Binding NoRedirects}" />
+                <MenuItem Header="{l:L rv.noRedirects}" ToggleType="CheckBox" IsChecked="{Binding NoRedirects}" IsVisible="{Binding IsHttp}" />
                 <MenuItem Header="{l:L peach.openTextPeach}" Command="{Binding OpenInTextPeachCommand}" />
                 <Separator />
                 <MenuItem Header="{l:L rv.reloadDisk}" Command="{Binding ReloadFromDiskCommand}" />
@@ -104,7 +109,41 @@
             <views:AuthView DataContext="{Binding Auth}" />
           </ScrollViewer>
           <DockPanel IsVisible="{Binding IsBodySection}">
-            <Border DockPanel.Dock="Top" Padding="10,6">
+            <!-- WebSocket: the message being written, and the saved ones on the left -->
+            <Border DockPanel.Dock="Top" Padding="10,6" IsVisible="{Binding IsWebSocket}">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+                  <Button Classes="flat" Content="{l:L rv.format}" Command="{Binding FormatBodyCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L rv.format.tip}" />
+                  <Button Classes="flat" Content="{l:L ws.saveMessage.short}" Command="{Binding SaveMessageCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L ws.saveMessage.tip}" />
+                  <Button Content="{l:L ws.sendMessage}" Command="{Binding SendMessageCommand}" IsEnabled="{Binding WsConnected}" ToolTip.Tip="{l:L ws.sendMessage.tip}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Text="{l:L ws.messageType}" Classes="dim" VerticalAlignment="Center" />
+                  <ComboBox ItemsSource="{Binding MessageTypes}" SelectedItem="{Binding BodyType}" MinWidth="110" />
+                </StackPanel>
+              </DockPanel>
+            </Border>
+            <Border DockPanel.Dock="Left" Width="190" BorderBrush="#3a3c42" BorderThickness="0,1,1,0" IsVisible="{Binding IsWebSocket}">
+              <DockPanel>
+                <DockPanel DockPanel.Dock="Top" Margin="10,6,6,4">
+                  <Button DockPanel.Dock="Right" Classes="flat" Content="✕" Command="{Binding RemoveMessageCommand}" Foreground="#8a8d93"
+                          IsVisible="{Binding HasSelectedSavedMessage}" ToolTip.Tip="{l:L ws.removeMessage.tip}" Padding="6,0" />
+                  <TextBlock Text="{l:L ws.saved}" Classes="dim" FontSize="11" VerticalAlignment="Center" />
+                </DockPanel>
+                <TextBlock DockPanel.Dock="Bottom" Text="{l:L ws.saved.hint}" Classes="dim" FontSize="11" TextWrapping="Wrap" Margin="10,4,10,8" />
+                <ListBox x:Name="SavedList" ItemsSource="{Binding SavedMessages}" SelectedItem="{Binding SelectedSavedMessage}" Background="Transparent">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="core:WsMessage">
+                      <StackPanel Margin="4,1" ToolTip.Tip="{Binding Data}">
+                        <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Data}" Classes="dim mono" FontSize="10" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </DockPanel>
+            </Border>
+            <Border DockPanel.Dock="Top" Padding="10,6" IsVisible="{Binding IsHttp}">
               <DockPanel>
                 <Button DockPanel.Dock="Right" Classes="flat" Content="{l:L rv.format}" Command="{Binding FormatBodyCommand}" Foreground="#8a8d93"
                         IsVisible="{Binding IsEditorBody}" ToolTip.Tip="{l:L rv.format.tip}" />
@@ -121,7 +160,7 @@
                 <TextBlock Text="{l:L rv.gql.query}" Classes="dim" FontSize="11" />
               </Border>
               <Panel Grid.Row="1">
-                <ae:TextEditor x:Name="BodyEditor" IsVisible="{Binding IsEditorBody}" ShowLineNumbers="True"
+                <ae:TextEditor x:Name="BodyEditor" IsVisible="{Binding IsComposer}" ShowLineNumbers="True"
                                HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
                 <ScrollViewer IsVisible="{Binding IsFormBody}" Padding="10,2,10,8">
                   <StackPanel Spacing="6">
@@ -146,6 +185,7 @@
           </DockPanel>
           <DockPanel IsVisible="{Binding IsTestsSection}">
             <SelectableTextBlock DockPanel.Dock="Top" Margin="12,8,12,6" Foreground="#8a8d93" FontSize="11" TextWrapping="Wrap" Text="{l:L rv.tests.hint}" />
+            <SelectableTextBlock DockPanel.Dock="Top" Margin="12,0,12,6" Foreground="#4ac7c0" FontSize="11" TextWrapping="Wrap" Text="{l:L ws.tests.hint}" IsVisible="{Binding IsWebSocket}" />
             <TextBox Text="{Binding TestsText}" AcceptsReturn="True" Classes="mono" Margin="10,0,10,10" TextWrapping="NoWrap"
                      VerticalContentAlignment="Top" Watermark="status == 200&#10;$.data.id exists&#10;set TOKEN = $.token" />
           </DockPanel>
@@ -162,10 +202,11 @@
           <DockPanel>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasResponse}">
               <Button Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyResponseCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L rv.copyResponse.tip}" />
-              <Button Classes="flat" Content="{l:L rv.saveResponse.short}" Command="{Binding SaveResponseCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L rv.saveResponse}" />
+              <Button Classes="flat" Content="{l:L rv.saveResponse.short}" Command="{Binding SaveResponseCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L rv.saveResponse}" IsVisible="{Binding IsHttp}" />
+              <Button Classes="flat" Content="{l:L ws.clear}" Command="{Binding ClearLogCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L ws.clear.tip}" IsVisible="{Binding IsWebSocket}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="12">
-              <TextBlock Classes="section" Text="{l:L rv.response}" />
+              <TextBlock Classes="section" Text="{Binding ResponseTitle}" />
               <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding HasResponse}">
                 <Border Classes="status" Background="{Binding StatusBrush}">
                   <TextBlock Text="{Binding StatusText}" Foreground="White" FontWeight="SemiBold" FontSize="12" />
@@ -181,10 +222,11 @@
         </Border>
         <Border DockPanel.Dock="Top" Background="#222327" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" IsVisible="{Binding HasResponse}">
           <StackPanel Orientation="Horizontal">
-            <Button Classes="seg" Classes.active="{Binding IsBodyResponse}" Content="{l:L rv.body}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="body" Padding="12,5" />
+            <Button Classes="seg" Classes.active="{Binding IsBodyResponse}" Content="{l:L rv.body}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="body" Padding="12,5" IsVisible="{Binding IsHttp}" />
+            <Button Classes="seg" Classes.active="{Binding IsMessagesResponse}" Content="{Binding WsLogTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="messages" Padding="12,5" IsVisible="{Binding IsWebSocket}" />
             <Button Classes="seg" Classes.active="{Binding IsHeadersResponse}" Content="{Binding ResponseHeadersTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="headers" Padding="12,5" />
             <Button Classes="seg" Classes.active="{Binding IsCookiesResponse}" Content="{Binding ResponseCookiesTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="cookies" Padding="12,5" />
-            <Button Classes="seg" Classes.active="{Binding IsTestsResponse}" Content="{Binding ResponseTestsTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="tests" Padding="12,5" />
+            <Button Classes="seg" Classes.active="{Binding IsTestsResponse}" Content="{Binding ResponseTestsTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="tests" Padding="12,5" IsVisible="{Binding IsHttp}" />
           </StackPanel>
         </Border>
 
@@ -202,7 +244,8 @@
         <Panel Background="#1b1c1f">
           <StackPanel IsVisible="{Binding !HasResponse}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="4" IsHitTestVisible="False">
             <TextBlock Classes="dim" Text="{l:L rv.noResponse}" HorizontalAlignment="Center" />
-            <TextBlock Classes="dim" FontSize="11" Text="{l:L rv.noResponse.hint}" HorizontalAlignment="Center" />
+            <TextBlock Classes="dim" FontSize="11" Text="{l:L rv.noResponse.hint}" HorizontalAlignment="Center" IsVisible="{Binding IsHttp}" />
+            <TextBlock Classes="dim" FontSize="11" Text="{l:L ws.noResponse.hint}" HorizontalAlignment="Center" IsVisible="{Binding IsWebSocket}" />
           </StackPanel>
 
           <Panel IsVisible="{Binding HasResponse}">
@@ -223,6 +266,29 @@
                 </Border>
               </ScrollViewer>
             </Panel>
+            <!-- WebSocket: the log (newest at the bottom) and the selected message in full -->
+            <Grid IsVisible="{Binding IsMessagesResponse}" RowDefinitions="3*,4,2*" Background="#1e1f22">
+              <ListBox x:Name="WsLogList" ItemsSource="{Binding WsLog}" SelectedItem="{Binding SelectedWsRow}" Background="#1e1f22">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:WsLogRow">
+                    <DockPanel Margin="6,1">
+                      <TextBlock DockPanel.Dock="Left" Text="{Binding Time}" Classes="dim mono" FontSize="11" Width="92" VerticalAlignment="Center" />
+                      <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" Foreground="{Binding Brush}" FontWeight="Bold" Width="18" VerticalAlignment="Center" />
+                      <TextBlock DockPanel.Dock="Right" Text="{Binding Size}" Classes="dim" FontSize="11" Margin="8,0,0,0" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Preview}" Classes="mono" FontSize="12" TextTrimming="CharacterEllipsis" MaxLines="1" VerticalAlignment="Center" />
+                    </DockPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <TextBlock Classes="dim" FontStyle="Italic" Text="{l:L ws.emptyLog}" Margin="12,8" IsVisible="{Binding !HasLog}" />
+              <GridSplitter Grid.Row="1" ResizeDirection="Rows" Height="4" />
+              <Panel Grid.Row="2" Background="#1b1c1f">
+                <ae:TextEditor x:Name="MessageEditor" ShowLineNumbers="True" IsReadOnly="True"
+                               HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
+                <TextBlock Classes="dim" FontStyle="Italic" Text="{l:L ws.pickMessage}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           IsVisible="{Binding !HasSelectedWsRow}" IsHitTestVisible="False" />
+              </Panel>
+            </Grid>
             <!-- Headers -->
             <ListBox IsVisible="{Binding IsHeadersResponse}" ItemsSource="{Binding ResponseHeaders}" Background="#1e1f22" x:Name="HeaderList">
               <ListBox.ItemTemplate>

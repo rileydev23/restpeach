@@ -11,10 +11,15 @@ public sealed record RunResult(string RelPath, ApiRequest? Request, PreparedRequ
 {
     /// <summary>
     /// With tests: all of them pass. Without tests: a response arrived and it is not an HTTP error (status &lt; 400),
-    /// which is what a CI pipeline expects from "run the collection".
+    /// which is what a CI pipeline expects from "run the collection"; a WebSocket must also not have been closed by
+    /// the server with an error code (1011, 1008…).
     /// </summary>
     public bool Passed => Error is null && Response is { Error: null } r
-                          && (Assertions.Count > 0 ? Assertions.All(a => a.Passed) : r.Status < 400);
+                          && (Assertions.Count > 0 ? Assertions.All(a => a.Passed) : r.Status < 400 && !AbnormalClose(r.WebSocketClose));
+
+    /// <summary>1000 (normal), 1001 (going away) and 1005 (no code) are clean; the rest say something went wrong.</summary>
+    public static bool AbnormalClose(string? close) =>
+        close is not null && !(close.StartsWith("1000") || close.StartsWith("1001") || close.StartsWith("1005"));
 
     public string Name => Request?.Name ?? Workspace.NameOf(RelPath);
 }
@@ -68,7 +73,10 @@ public sealed class Runner
         PreparedRequest prepared;
         try { prepared = Prepare(_ws, _config, Workspace.ParentOf(relPath), req, _env, Runtime); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return new RunResult(relPath, req, null, null, Array.Empty<AssertionResult>(), e.Message); }
-        var response = await _engine.SendAsync(prepared, HttpOptions.For(_config, req), ct);
+        var options = HttpOptions.For(_config, req);
+        var response = prepared.Kind == ApiKind.WebSocket
+            ? await WebSocketSession.ProbeAsync(prepared, options, _engine, ct)
+            : await _engine.SendAsync(prepared, options, ct);
         var assertions = response.Error is null ? Assertions.Evaluate(req.Tests, response, Runtime) : new List<AssertionResult>();
         return new RunResult(relPath, req, prepared, response, assertions, null);
     }

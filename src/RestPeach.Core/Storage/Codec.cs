@@ -13,7 +13,7 @@ public static class Codec
     // ------------------------------------------------------------ requests
 
     private static readonly HashSet<string> RequestKeys = new(StringComparer.Ordinal)
-        { "name", "method", "url", "description", "headers", "disabledParams", "auth", "body", "tests", "followRedirects" };
+        { "name", "method", "url", "description", "headers", "disabledParams", "auth", "body", "tests", "followRedirects", "messages" };
 
     public static ApiRequest ReadRequest(JsonNode? node, string fallbackName)
     {
@@ -30,6 +30,7 @@ public static class Codec
             Body = ReadBody(o["body"]),
             Tests = (o.Arr("tests") ?? new JsonArray()).Select(t => t.Scalar() ?? "").Where(t => t.Length > 0).ToList(),
             FollowRedirects = o["followRedirects"] is JsonValue fr && fr.TryGetValue<bool>(out var follow) ? follow : null,
+            Messages = ReadMessages(o.Arr("messages")),
             Extra = Leftovers(o, RequestKeys),
         };
         if (r.Name.Length == 0) r.Name = fallbackName;
@@ -50,7 +51,27 @@ public static class Codec
         if (r.Body.Type != BodyTypes.None) o["body"] = WriteBody(r.Body);
         if (r.Tests.Count > 0) o["tests"] = new JsonArray(r.Tests.Select(t => (JsonNode)JsonValue.Create(t)!).ToArray());
         if (r.FollowRedirects is { } follow) o["followRedirects"] = follow;
+        if (r.Messages.Count > 0) o["messages"] = WriteMessages(r.Messages);
         return o;
+    }
+
+    /// <summary>Saved WebSocket messages. "data" may be written by hand as a JSON object instead of a string.</summary>
+    private static List<WsMessage> ReadMessages(JsonArray? a)
+    {
+        var list = new List<WsMessage>();
+        if (a is null) return list;
+        foreach (var item in a)
+            if (item is JsonObject m) list.Add(new WsMessage { Name = m.Str("name"), Data = Text(m["data"]) });
+        return list;
+    }
+
+    /// <summary>In the order they were saved (the order is the user's, not alphabetical).</summary>
+    private static JsonArray WriteMessages(IEnumerable<WsMessage> messages)
+    {
+        var a = new JsonArray();
+        foreach (var m in messages.Where(m => m.Name.Length > 0 || m.Data.Length > 0))
+            a.Add((JsonNode)new JsonObject { ["data"] = m.Data, ["name"] = m.Name });
+        return a;
     }
 
     public static List<KeyValue> ReadRows(JsonArray? a)

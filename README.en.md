@@ -86,6 +86,7 @@ No invitations, no accounts, no telemetry. A single portable `.exe`, in English 
 |---|---|
 | **Projects** | Persistent list, favorites ★, collapsible groups (shared with the rest of the Peach family), folder scan, drag and drop, several open tabs restored on restart. |
 | **Requests** | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS. Params kept in sync with the URL, headers, JSON / GraphQL (query + variables) / text / XML / HTML / form-data (with files) / x-www-form-urlencoded bodies, notes. GraphQL, JSON-RPC and SOAP are recognized (GQL, RPC, SOAP in the tree) and the response is explained in their terms: errors with status 200, Faults, SSE events. Pasting a cURL command into the URL imports it. |
+| **WebSockets** | Method **WS** (or a `ws://` / `wss://` URL): Connect, send messages (with `{{variables}}`) and watch the log of what was sent ↑ and received ↓ with time and size; the selected message is shown in full and formatted. Messages saved with the request, resent with a double-click. Headers, auth and cookies go in the handshake; the server's close code is shown. Running the collection connects, sends the message, collects the answers and runs the tests on them. |
 | **Response** | Status, time and size; highlighted and formatted body (JSON and XML), images, headers, cookies; search (Ctrl+F); copy and save. |
 | **Variables** | `{{NAME}}` in layers: collection < folders < environment < secrets < values captured in the session. Dynamic: `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`. Side panel with where each value comes from. |
 | **Auth** | Inherit, none, Bearer, Basic, API key (header or query). Set it on the collection or on a folder and the requests below inherit it. |
@@ -292,7 +293,7 @@ In CI, pass secrets with `--var` from the pipeline's protected variables:
 | Text shown | 16 MB | The rest is not shown (it can be saved in full). |
 | Default timeout | 30 s | Configurable in the collection's **Settings** or with `--timeout`. |
 
-Also: no pre/post-request scripts (on purpose: tests are declarative), no WebSockets, gRPC or schema-aware
+Also: no pre/post-request scripts (on purpose: tests are declarative), no gRPC or schema-aware
 GraphQL; changing the language needs a restart; only published for Windows x64 (Avalonia is cross-platform, so
 a port is possible).
 

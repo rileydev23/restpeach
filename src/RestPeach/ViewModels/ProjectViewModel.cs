@@ -50,6 +50,7 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
     [ObservableProperty] private IReadOnlyList<VariableRow> _variableRows = Array.Empty<VariableRow>();
     [ObservableProperty] private string _variablesHeader = "";
     [ObservableProperty] private string _curlPreview = "";
+    [ObservableProperty] private string _curlEmptyText = Loc.T("pv.curl.empty");
     [ObservableProperty] private IReadOnlyList<CookieRow> _jarCookies = Array.Empty<CookieRow>();
     [ObservableProperty] private bool _prettyResponse;
     [ObservableProperty] private bool _hasGit;
@@ -443,7 +444,10 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
             rows.Add(new VariableRow(m, Loc.T("var.undefined"), "", Palette.Red, true, true));
         VariableRows = rows.OrderByDescending(r => r.Used).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
         VariablesHeader = CurrentEnvironment is { } env ? Loc.F("pv.variablesIn", env.DisplayName) : Loc.T("pv.variables");
-        CurlPreview = masked is null ? "" : Curl.Write(masked);
+        // A WebSocket has no cURL form: the panel says so instead of showing "curl -X WS".
+        bool ws = masked?.Kind == ApiKind.WebSocket;
+        CurlPreview = masked is null || ws ? "" : Curl.Write(masked);
+        CurlEmptyText = Loc.T(ws ? "ws.noCurl" : "pv.curl.empty");
         JarCookies = Engine.AllCookies().Select(c => new CookieRow(c.Name, c.Value, c.Domain + c.Path)).ToList();
         OnPropertyChanged(nameof(HasCookies));
         OnPropertyChanged(nameof(HasCurl));

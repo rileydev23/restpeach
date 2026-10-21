@@ -95,6 +95,15 @@ public sealed class BodySpec
     public BodySpec Clone() => new() { Type = Type, Data = Data, Variables = Variables, Fields = Fields.Select(f => f.Clone()).ToList() };
 }
 
+/// <summary>A WebSocket message kept with the request, ready to send again (the chat's "ping", "join"…).</summary>
+public sealed class WsMessage
+{
+    public string Name { get; set; } = "";
+    public string Data { get; set; } = "";
+
+    public WsMessage Clone() => new() { Name = Name, Data = Data };
+}
+
 /// <summary>
 /// One request, as stored in a <c>.req.json</c> / <c>.req.yaml</c> file. The URL holds the active query
 /// parameters; parameters switched off in the Params table live in <see cref="DisabledParams"/> so they survive.
@@ -114,9 +123,14 @@ public sealed class ApiRequest
     public List<string> Tests { get; set; } = new();
     /// <summary>Overrides the collection's "follow redirects" for this request only; null = use the collection's.</summary>
     public bool? FollowRedirects { get; set; }
+    /// <summary>WebSocket only: saved messages. The message being written is the <see cref="Body"/>.</summary>
+    public List<WsMessage> Messages { get; set; } = new();
     public JsonObject Extra { get; set; } = new();
 
-    public static readonly string[] Methods = { "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD" };
+    /// <summary>Not an HTTP method: a WebSocket connection (the handshake is a GET).</summary>
+    public const string WebSocket = "WS";
+
+    public static readonly string[] Methods = { "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", WebSocket };
 
     public ApiRequest Clone() => new()
     {
@@ -130,6 +144,7 @@ public sealed class ApiRequest
         Body = Body.Clone(),
         Tests = Tests.ToList(),
         FollowRedirects = FollowRedirects,
+        Messages = Messages.Select(m => m.Clone()).ToList(),
         Extra = (JsonObject)Extra.DeepClone(),
     };
 }

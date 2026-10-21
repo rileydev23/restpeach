@@ -70,7 +70,7 @@ public static class Look
         "PUT" => Palette.Blue,
         "PATCH" => Palette.Purple,
         "DELETE" => Palette.Red,
-        "HEAD" or "OPTIONS" => Palette.Teal,
+        "HEAD" or "OPTIONS" or "WS" => Palette.Teal,
         _ => Palette.Dim,
     };
 
@@ -93,6 +93,7 @@ public static class Look
         Core.Model.ApiKind.GraphQL => Palette.Pink,
         Core.Model.ApiKind.JsonRpc => Palette.Olive,
         Core.Model.ApiKind.Soap => Palette.Teal,
+        Core.Model.ApiKind.WebSocket => Palette.Teal,
         _ => Method(method),
     };
 

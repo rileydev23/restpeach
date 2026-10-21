@@ -30,6 +30,7 @@ public static class ProtocolInsight
                 ApiKind.GraphQL => GraphQL(r),
                 ApiKind.JsonRpc => JsonRpc(r),
                 ApiKind.Soap => Soap(r),
+                ApiKind.WebSocket => WebSocket(r),
                 _ => null,
             };
             insight ??= ct.Contains("event-stream") ? Sse(r.Text)
@@ -43,6 +44,20 @@ public static class ProtocolInsight
         if (r.Interrupted is { } why)
             list.Add(new Insight(Loc.F("insight.interrupted." + why, ResponseFormatter.Size(r.Size)), InsightLevel.Warning));
         return list;
+    }
+
+    // ------------------------------------------------------------ WebSocket
+
+    /// <summary>A WebSocket of a collection run: how many messages came back and whether the server hung up.</summary>
+    private static Insight WebSocket(ApiResponse r)
+    {
+        if (r.Status != 101) return new Insight(Loc.F("insight.ws.refused", r.Status), InsightLevel.Error);
+        using var doc = TryJson(r.Text);
+        int n = doc?.RootElement.ValueKind == JsonValueKind.Array ? doc.RootElement.GetArrayLength() : 0;
+        var text = Loc.Plural("insight.ws.received", n);
+        if (r.WebSocketClose is { } close)
+            return new Insight(text + " · " + Loc.F("insight.ws.closedByServer", close), close.StartsWith("1000") ? InsightLevel.Info : InsightLevel.Warning);
+        return new Insight(text, n > 0 ? InsightLevel.Ok : InsightLevel.Info);
     }
 
     // ------------------------------------------------------------ GraphQL

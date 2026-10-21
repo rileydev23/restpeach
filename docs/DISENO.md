@@ -155,6 +155,7 @@ Todo sale de la paleta anterior; aquí se fija **qué significa** cada color (`L
 | PATCH | violeta `#9a7ae0` | `PATCH` |
 | DELETE | rojo `#e0645a` | `DEL` |
 | HEAD, OPTIONS | turquesa `#4ac7c0` | `HEAD`, `OPT` |
+| WS (WebSocket) | turquesa `#4ac7c0` | `WS` |
 
 La etiqueta (`TextBlock.method`) va en mayúsculas, monoespaciada, 9 px, negrita, con ancho mínimo fijo (árbol,
 pestañas, filas de una ejecución) para que los nombres queden alineados.
@@ -387,7 +388,7 @@ Los atajos comunes a todas las apps Peach más los de RestPeach; todos en XAML (
 | `Ctrl+W` / `Ctrl+F4` | Cerrar el documento (o el proyecto) |
 | `F1` | Acerca de, atajos e idioma |
 | `F5` | Volver a leer la colección, los entornos y git |
-| `Ctrl+Enter` | Enviar la petición / ejecutar de nuevo |
+| `Ctrl+Enter` | Enviar la petición / ejecutar de nuevo; en un WebSocket, conectar y luego enviar el mensaje |
 | `Ctrl+S` / `Ctrl+Shift+S` | Guardar / guardar todo |
 | `Ctrl+L` | Ir a la URL |
 | `Ctrl+N` / `Ctrl+Shift+N` | Nueva petición / nueva carpeta |

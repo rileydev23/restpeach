@@ -62,7 +62,7 @@
               <Button Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyBodyCommand}" Foreground="#8a8d93"
                       IsVisible="{Binding IsBodyDetail}" ToolTip.Tip="{l:L rv.copyResponse.tip}" />
               <Button Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyBodyCommand}" Foreground="#8a8d93" IsVisible="{Binding IsSentDetail}" />
-              <Button Classes="flat" Content="{l:L rv.copyCurl}" Command="{Binding CopyCurlCommand}" Foreground="#8a8d93" IsVisible="{Binding Selected.WasSent, FallbackValue=False}" />
+              <Button Classes="flat" Content="{l:L rv.copyCurl}" Command="{Binding CopyCurlCommand}" Foreground="#8a8d93" IsVisible="{Binding Selected.CanCopyCurl, FallbackValue=False}" />
               <Button Classes="flat" Content="{l:L run.open}" Command="{Binding OpenSelectedCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L run.open.tip}" />
             </StackPanel>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="12" Margin="12,0">

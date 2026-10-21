@@ -85,7 +85,7 @@ token). Lo que no está en la lista va después: carpetas primero y luego petici
 
 | Campo | Qué es |
 |---|---|
-| `method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` o `HEAD`. |
+| `method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS` o `HEAD`; `WS` para un WebSocket (ver [WebSockets](#websockets)). |
 | `url` | La URL con sus parámetros **activos** en la query. |
 | `disabledParams` | Parámetros desmarcados en la tabla Params: se guardan pero no se envían. |
 | `headers` | Lista de `{ active, key, value }`. `Content-Type` se agrega según el body si no lo pones; `Authorization` sale de la auth. |
@@ -93,6 +93,7 @@ token). Lo que no está en la lista va después: carpetas primero y luego petici
 | `body` | Ver [Body](#body). |
 | `tests` | Pruebas y capturas, una por elemento. Ver el [README](../README.md#pruebas-declarativas). |
 | `description` | Notas libres (pestaña Notas). |
+| `messages` | Solo WebSocket: mensajes guardados, en orden. Ver [WebSockets](#websockets). |
 | `followRedirects` | Solo para esta petición: `false` no sigue redirecciones aunque la colección sí. Si no está, vale el de la colección. |
 
 En YAML es lo mismo:
@@ -135,6 +136,38 @@ protocolo (errores de GraphQL o JSON-RPC que llegan con 200, `soap:Fault`, event
 RFC 7807).
 
 Solo se escriben los campos que usa el tipo, así cambiar de tipo en la app no deja restos en git.
+
+### WebSockets
+
+```json
+{
+  "body": { "data": "{\"type\":\"ping\"}", "type": "json" },
+  "messages": [
+    { "data": "{\"type\":\"join\",\"room\":\"dev\"}", "name": "join" },
+    { "data": "{\"type\":\"who\"}", "name": "who" }
+  ],
+  "method": "WS",
+  "name": "Chat",
+  "tests": [ "status == 101", "$[0].type == \"welcome\"" ],
+  "url": "{{BASE_URL}}/ws/chat?token={{TOKEN}}"
+}
+```
+
+Con `method: "WS"` (o una `url` que empieza con `ws://` o `wss://`) la petición es un WebSocket, marcado **WS** en
+el árbol. Una URL `http://` o `https://` se convierte en `ws://` o `wss://`, así se comparte `{{BASE_URL}}` con las
+peticiones REST. `headers`, `auth` (Bearer, Basic o API key) y las cookies de la sesión van en el *handshake*;
+`Sec-WebSocket-Protocol` pide subprotocolos (separados por comas).
+
+- `body` es el mensaje que se está escribiendo: `json` o `text`, sin Content-Type. Sus `{{variables}}` se reemplazan
+  al enviarlo.
+- `messages` son los mensajes guardados (`name` y `data`), en el orden en que se guardaron.
+- Al **ejecutar** la colección (o con `restpeach-cli run`) se conecta, se envía `body` si tiene algo, se junta lo que
+  llega hasta que el servidor calla un segundo (o cierra, o vence el timeout) y se cierra. La respuesta tiene status
+  101 y los headers del *handshake*, y su body es un array JSON con los mensajes recibidos (cada uno como JSON si lo
+  es, si no como texto), así que valen las mismas pruebas: `status == 101`, `$[1].type == "pong"`,
+  `body contains "hola"`. Sin pruebas, falla si el servidor rechaza el *upgrade* o cierra con un código de error
+  (todo lo que no sea 1000, 1001 o 1005).
+- Exportar a Postman, OpenAPI o bash deja fuera los WebSockets: esos formatos no tienen cómo describirlos.
 
 ## Entornos
 

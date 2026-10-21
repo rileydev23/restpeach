@@ -40,7 +40,14 @@ public static class RequestPreparer
         string X(string s) => Interpolator.Expand(s, scope, missing, secretMask);
 
         var method = string.IsNullOrWhiteSpace(req.Method) ? "GET" : req.Method.Trim().ToUpperInvariant();
+        var kind = ApiKinds.Of(req);
         var url = NormalizeUrl(X(req.Url.Trim()));
+        if (kind == ApiKind.WebSocket)
+        {
+            // The body is the message to send once connected, not part of the handshake.
+            method = ApiRequest.WebSocket;
+            url = WebSocketUrl(url);
+        }
         var bodyType = req.Body.Type;
         var raw = BodyTypes.IsRaw(bodyType) ? X(req.Body.Data) : "";
         if (bodyType == BodyTypes.GraphQL)
@@ -67,7 +74,7 @@ public static class RequestPreparer
             Url = url,
             BodyType = bodyType,
             RawBody = raw,
-            Kind = ApiKinds.Of(req),
+            Kind = kind,
         };
         foreach (var h in req.Headers.Where(h => h.Active && h.Key.Trim().Length > 0))
             p.Headers.Add(new(X(h.Key.Trim()), X(h.Value)));
@@ -100,7 +107,7 @@ public static class RequestPreparer
             }
         }
         // multipart sets its own boundary, so only the other bodies get a default Content-Type.
-        if (p.BodyType != BodyTypes.FormData && BodyTypes.DefaultContentType(p.BodyType) is { } ct && !p.HasHeader("Content-Type"))
+        if (kind != ApiKind.WebSocket && p.BodyType != BodyTypes.FormData && BodyTypes.DefaultContentType(p.BodyType) is { } ct && !p.HasHeader("Content-Type"))
             p.Headers.Add(new("Content-Type", ct));
 
         foreach (var m in missing) p.Missing.Add(m);
@@ -121,6 +128,14 @@ public static class RequestPreparer
             sb.Append(",\n  \"variables\": ").Append(vars);
         }
         return sb.Append("\n}").ToString();
+    }
+
+    /// <summary>"http://h/ws" → "ws://h/ws" (a {{BASE_URL}} shared with the REST requests is usually http).</summary>
+    public static string WebSocketUrl(string url)
+    {
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) return "ws://" + url[7..];
+        if (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return "wss://" + url[8..];
+        return url;
     }
 
     /// <summary>"localhost:3000/x" → "http://localhost:3000/x": a scheme is needed and nobody types it.</summary>

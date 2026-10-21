@@ -21,8 +21,8 @@ public partial class RequestView : UserControl
 {
     private RequestTab? _tab;
     private ViewerSettings? _settings;
-    private TextMate.Installation? _bodyTm, _responseTm, _variablesTm;
-    private string? _bodyExt, _responseExt;
+    private TextMate.Installation? _bodyTm, _responseTm, _variablesTm, _messageTm;
+    private string? _bodyExt, _responseExt, _messageExt;
 
     public RequestView()
     {
@@ -30,7 +30,10 @@ public partial class RequestView : UserControl
         Configure(BodyEditor, readOnly: false);
         Configure(ResponseEditor, readOnly: true);
         Configure(VariablesEditor, readOnly: false);
+        Configure(MessageEditor, readOnly: true);
         SearchPanel.Install(BodyEditor);
+        SearchPanel.Install(MessageEditor);
+        SavedList.DoubleTapped += (_, _) => { if (_tab is { } t) _ = t.SendSavedAsync(t.SelectedSavedMessage); };
         SearchPanel.Install(VariablesEditor);
         SearchPanel.Install(ResponseEditor);
         DataContextChanged += (_, _) => Attach();
@@ -77,7 +80,7 @@ public partial class RequestView : UserControl
     private void ApplySettings()
     {
         if (_settings is null) return;
-        foreach (var e in new[] { BodyEditor, ResponseEditor, VariablesEditor })
+        foreach (var e in new[] { BodyEditor, ResponseEditor, VariablesEditor, MessageEditor })
         {
             e.FontSize = _settings.FontSize - 1;
             e.WordWrap = _settings.WordWrap;
@@ -92,6 +95,8 @@ public partial class RequestView : UserControl
             _tab.FocusUrlRequested -= OnFocusUrl;
             _tab.ResponseChanged -= OnResponseChanged;
             _tab.BodyTypeChangedForView -= OnBodyTypeChanged;
+            _tab.MessageChanged -= OnMessageChanged;
+            _tab.WsLog.CollectionChanged -= OnLogChanged;
         }
         _tab = DataContext as RequestTab;
         if (_tab is null) return;
@@ -99,12 +104,16 @@ public partial class RequestView : UserControl
         _tab.FocusUrlRequested += OnFocusUrl;
         _tab.ResponseChanged += OnResponseChanged;
         _tab.BodyTypeChangedForView += OnBodyTypeChanged;
+        _tab.MessageChanged += OnMessageChanged;
+        _tab.WsLog.CollectionChanged += OnLogChanged;
 
         BodyEditor.Document = _tab.BodyDocument;
         ResponseEditor.Document = _tab.ResponseDocument;
         VariablesEditor.Document = _tab.VariablesDocument;
+        MessageEditor.Document = _tab.MessageDocument;
         _variablesTm = Install(VariablesEditor, _variablesTm, ".json");
-        _bodyExt = _responseExt = null;
+        _bodyExt = _responseExt = _messageExt = null;
+        ApplyMessageGrammar();
         ApplyBodyGrammar();
         ApplyBodyLayout();
         ApplyResponseGrammar();
@@ -139,6 +148,27 @@ public partial class RequestView : UserControl
             ResponseEditor.ScrollToHome();
             ResponseEditor.CaretOffset = 0;
         }, DispatcherPriority.Background);
+    }
+
+    private void OnMessageChanged()
+    {
+        ApplyMessageGrammar();
+        MessageEditor.ScrollToHome();
+    }
+
+    private void ApplyMessageGrammar()
+    {
+        if (_tab is null || _tab.MessageExtension == _messageExt) return;
+        _messageExt = _tab.MessageExtension;
+        _messageTm = Install(MessageEditor, _messageTm, _messageExt);
+    }
+
+    /// <summary>New lines keep the log at its end, unless a line is selected (someone is reading it).</summary>
+    private void OnLogChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (_tab is null || e.Action != System.Collections.Specialized.NotifyCollectionChangedAction.Add || _tab.SelectedWsRow is not null) return;
+        var last = _tab.WsLog.Count - 1;
+        Dispatcher.UIThread.Post(() => { if (_tab is not null && last < _tab.WsLog.Count) WsLogList.ScrollIntoView(last); }, DispatcherPriority.Background);
     }
 
     private void OnFocusUrl() => Dispatcher.UIThread.Post(() =>

@@ -34,6 +34,8 @@ public sealed class ApiResponse
     /// stream that never ends (SSE, long polling) can still be read.
     /// </summary>
     public string? Interrupted { get; init; }
+    /// <summary>WebSocket runs: the server closed the connection itself, with this code and reason ("1008 Unauthorized").</summary>
+    public string? WebSocketClose { get; init; }
     public DateTimeOffset At { get; init; } = DateTimeOffset.Now;
 
     public bool Ok => Error is null && Status is >= 200 and < 400;
@@ -76,6 +78,7 @@ public sealed class HttpEngine : IDisposable
 
     public CookieContainer Cookies { get; private set; } = new();
     private readonly Dictionary<(bool Redirects, bool Tls), HttpClient> _clients = new();
+    private readonly Dictionary<bool, HttpMessageInvoker> _webSockets = new();
     private readonly object _lock = new();
 
     public void ClearCookies()
@@ -84,6 +87,8 @@ public sealed class HttpEngine : IDisposable
         {
             foreach (var c in _clients.Values) c.Dispose();
             _clients.Clear();
+            foreach (var w in _webSockets.Values) w.Dispose();
+            _webSockets.Clear();
             Cookies = new CookieContainer();
         }
     }
@@ -96,22 +101,42 @@ public sealed class HttpEngine : IDisposable
         {
             var key = (o.FollowRedirects, o.VerifyTls);
             if (_clients.TryGetValue(key, out var c)) return c;
-            var handler = new SocketsHttpHandler
-            {
-                AllowAutoRedirect = o.FollowRedirects,
-                MaxAutomaticRedirections = 10,
-                AutomaticDecompression = DecompressionMethods.All,
-                CookieContainer = Cookies,
-                UseCookies = true,
-                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-                ConnectTimeout = TimeSpan.FromSeconds(15),
-                ConnectCallback = ConnectAnyAsync,
-            };
-            if (!o.VerifyTls) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
-            c = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+            c = new HttpClient(Handler(o.FollowRedirects, o.VerifyTls)) { Timeout = Timeout.InfiniteTimeSpan };
             _clients[key] = c;
             return c;
         }
+    }
+
+    /// <summary>
+    /// What WebSocket handshakes go through: the same cookie jar, TLS setting and IPv4/IPv6 connect as the requests,
+    /// so a session cookie from a login reaches the socket. A handshake never follows redirects.
+    /// </summary>
+    public HttpMessageInvoker WebSocketInvoker(HttpOptions o)
+    {
+        lock (_lock)
+        {
+            if (_webSockets.TryGetValue(o.VerifyTls, out var w)) return w;
+            w = new HttpMessageInvoker(Handler(false, o.VerifyTls));
+            _webSockets[o.VerifyTls] = w;
+            return w;
+        }
+    }
+
+    private SocketsHttpHandler Handler(bool followRedirects, bool verifyTls)
+    {
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = followRedirects,
+            MaxAutomaticRedirections = 10,
+            AutomaticDecompression = DecompressionMethods.All,
+            CookieContainer = Cookies,
+            UseCookies = true,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            ConnectTimeout = TimeSpan.FromSeconds(15),
+            ConnectCallback = ConnectAnyAsync,
+        };
+        if (!verifyTls) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+        return handler;
     }
 
     public async Task<ApiResponse> SendAsync(PreparedRequest p, HttpOptions options, CancellationToken ct)
@@ -212,10 +237,10 @@ public sealed class HttpEngine : IDisposable
         new() { Error = error, ElapsedMs = sw.Elapsed.TotalMilliseconds, FinalUrl = p.Url };
 
     /// <summary>The innermost useful message ("No such host is known. (api.local:443)").</summary>
-    private static string Describe(Exception e)
+    internal static string Describe(Exception e)
     {
         var inner = e;
-        while (inner.InnerException is not null && inner is HttpRequestException or AggregateException) inner = inner.InnerException;
+        while (inner.InnerException is not null && inner is HttpRequestException or AggregateException or System.Net.WebSockets.WebSocketException) inner = inner.InnerException;
         return inner.Message;
     }
 
@@ -318,6 +343,8 @@ public sealed class HttpEngine : IDisposable
         {
             foreach (var c in _clients.Values) c.Dispose();
             _clients.Clear();
+            foreach (var w in _webSockets.Values) w.Dispose();
+            _webSockets.Clear();
         }
     }
 }

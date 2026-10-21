@@ -42,6 +42,7 @@ public sealed class RunRow
 
     public bool HasResponse => Result.Response is { Error: null };
     public bool WasSent => Result.Sent is not null;
+    public bool CanCopyCurl => WasSent && Kind != Core.Model.ApiKind.WebSocket;
     public IBrush StatusBadgeBrush => Look.StatusBadge(Result.Response?.Status ?? 0, Result.Error is not null || Result.Response?.Error is not null);
     public string Size => Result.Response is { Error: null } r ? ResponseFormatter.Size(r.Size) + (r.Truncated ? " " + Loc.T("rv.truncated") : "") : "";
     /// <summary>Why nothing came back (not sent, or the connection failed).</summary>
@@ -233,7 +234,8 @@ public sealed partial class RunTab : TabViewModel
         SummaryBrush = failed == 0 && !cts.IsCancellationRequested ? Palette.Green : Palette.Red;
         Selected = Rows.FirstOrDefault(r => !r.Result.Passed) ?? Rows.FirstOrDefault();
         // A failure is explained by its tests (or its error, listed there too).
-        if (Selected is { Result.Passed: false } && Detail == "body" && (Selected.Result.Assertions.Any(a => !a.Passed) || Selected.Failure is not null)) Detail = "tests";
+        if (Selected is { Result.Passed: false } && Detail == "body" && (Selected.Result.Assertions.Any(a => !a.Passed) || Selected.Failure is not null
+            || RunResult.AbnormalClose(Selected.Result.Response?.WebSocketClose))) Detail = "tests";
     }
 
     [RelayCommand]

@@ -25,6 +25,7 @@ public static partial class Exporter
         {
             ApiRequest r;
             try { r = ws.LoadRequest(rel); } catch (Exception e) when (e is IOException or InvalidDataException or System.Text.Json.JsonException or YamlDotNet.Core.YamlException) { continue; }
+            if (ApiKinds.IsWebSocket(r)) continue; // Postman v2.1, OpenAPI and curl have no way to say "WebSocket"
             var auth = AuthResolver.Resolve(r.Auth, ws.FolderChain(Workspace.ParentOf(rel)), config);
             list.Add(new Entry(rel, r, auth));
         }

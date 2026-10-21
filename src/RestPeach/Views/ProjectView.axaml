@@ -255,7 +255,7 @@
                 <Panel>
                   <SelectableTextBlock Text="{Binding CurlPreview}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11" Foreground="#c8c8c8"
                                        SelectionBrush="#33507a" IsVisible="{Binding HasCurl}" />
-                  <TextBlock Classes="dim" FontSize="12" Text="{l:L pv.curl.empty}" IsVisible="{Binding !HasCurl}" TextWrapping="Wrap" />
+                  <TextBlock Classes="dim" FontSize="12" Text="{Binding CurlEmptyText}" IsVisible="{Binding !HasCurl}" TextWrapping="Wrap" />
                 </Panel>
               </ScrollViewer>
 
