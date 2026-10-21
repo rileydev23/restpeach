@@ -1,0 +1,241 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:RestPeach.Services"
+             xmlns:vm="using:RestPeach.ViewModels"
+             xmlns:views="using:RestPeach.Views"
+             xmlns:ae="using:AvaloniaEdit"
+             x:Class="RestPeach.Views.RequestView"
+             x:DataType="vm:RequestTab">
+  <DockPanel>
+    <!-- Method + URL + Send -->
+    <Border DockPanel.Dock="Top" Background="#26272b" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" Padding="10,8">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="6,0,0,0">
+          <Button Classes="accent" Content="{l:L rv.send}" Command="{Binding SendCommand}" IsVisible="{Binding CanSend}"
+                  ToolTip.Tip="{l:L rv.send.tip}" MinWidth="84" HorizontalContentAlignment="Center" />
+          <Button Content="{l:L rv.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding IsSending}" MinWidth="84" HorizontalContentAlignment="Center" />
+          <Button Content="{l:L common.save}" Command="{Binding SaveCommand}" IsEnabled="{Binding IsDirty}" ToolTip.Tip="Ctrl+S" />
+          <Button Content="⋯" Padding="10,4" ToolTip.Tip="{l:L rv.more.tip}">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuItem Header="{l:L rv.copyCurl}" Command="{Binding CopyCurlCommand}" InputGesture="Ctrl+Shift+C" />
+                <MenuItem Header="{l:L rv.reveal}" Command="{Binding RevealInTreeCommand}" />
+                <MenuItem Header="{l:L peach.openTextPeach}" Command="{Binding OpenInTextPeachCommand}" />
+                <Separator />
+                <MenuItem Header="{l:L rv.reloadDisk}" Command="{Binding ReloadFromDiskCommand}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+        <ComboBox DockPanel.Dock="Left" Classes="method" ItemsSource="{Binding Methods}" SelectedItem="{Binding Method}"
+                  Foreground="{Binding MethodBrush}" Margin="0,0,6,0" ToolTip.Tip="{l:L rv.method.tip}" />
+        <TextBox x:Name="UrlBox" Classes="mono" Text="{Binding Url}" Watermark="{l:L rv.url.watermark}" VerticalContentAlignment="Center"
+                 MinHeight="30" FontSize="13" ToolTip.Tip="{l:L rv.url.tip}" />
+      </DockPanel>
+    </Border>
+
+    <!-- The URL as it will be sent -->
+    <Border DockPanel.Dock="Top" Background="#1e1f22" Padding="12,3">
+      <StackPanel Orientation="Horizontal" Spacing="10" ClipToBounds="True">
+        <SelectableTextBlock Text="{Binding ResolvedUrl}" Foreground="#8a8d93" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11"
+                             SelectionBrush="#33507a" ToolTip.Tip="{l:L rv.resolved.tip}" />
+        <TextBlock Text="{Binding MissingText}" Foreground="#e0645a" FontSize="11" VerticalAlignment="Center" />
+      </StackPanel>
+    </Border>
+
+    <!-- Banners -->
+    <Border DockPanel.Dock="Top" Background="#5a4318" Padding="10,6" IsVisible="{Binding !!LoadError}">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="{l:L peach.openTextPeach}" Command="{Binding OpenInTextPeachCommand}" BorderBrush="#8a6d1f" />
+        <Button DockPanel.Dock="Right" Content="{l:L common.reload}" Command="{Binding ReloadFromDiskCommand}" BorderBrush="#8a6d1f" Margin="0,0,6,0" />
+        <TextBlock Text="{Binding LoadError}" FontWeight="SemiBold" Foreground="#f0c890" VerticalAlignment="Center" TextWrapping="Wrap" />
+      </DockPanel>
+    </Border>
+    <Border DockPanel.Dock="Top" Background="#25364d" Padding="10,5" IsVisible="{Binding ChangedOnDisk}">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+          <Button Content="{l:L common.reload}" Command="{Binding ReloadFromDiskCommand}" />
+          <Button Content="{l:L rv.keepMine}" Command="{Binding KeepMineCommand}" />
+        </StackPanel>
+        <TextBlock Text="{l:L rv.changedOnDisk}" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
+    <Grid x:Name="Split">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*" MinHeight="140" />
+        <RowDefinition Height="4" />
+        <RowDefinition Height="*" MinHeight="140" />
+      </Grid.RowDefinitions>
+
+      <!-- ================= Request ================= -->
+      <DockPanel>
+        <Border DockPanel.Dock="Top" Background="#222327" BorderBrush="#3a3c42" BorderThickness="0,0,0,1">
+          <StackPanel Orientation="Horizontal">
+            <Button Classes="seg" Classes.active="{Binding IsParamsSection}" Content="{Binding ParamsTab}" Command="{Binding ShowSectionCommand}" CommandParameter="params" Padding="12,6" />
+            <Button Classes="seg" Classes.active="{Binding IsHeadersSection}" Content="{Binding HeadersTab}" Command="{Binding ShowSectionCommand}" CommandParameter="headers" Padding="12,6" />
+            <Button Classes="seg" Classes.active="{Binding IsAuthSection}" Content="{Binding AuthTab}" Command="{Binding ShowSectionCommand}" CommandParameter="auth" Padding="12,6" />
+            <Button Classes="seg" Classes.active="{Binding IsBodySection}" Content="{Binding BodyTab}" Command="{Binding ShowSectionCommand}" CommandParameter="body" Padding="12,6" />
+            <Button Classes="seg" Classes.active="{Binding IsTestsSection}" Content="{Binding TestsTab}" Command="{Binding ShowSectionCommand}" CommandParameter="tests" Padding="12,6" />
+            <Button Classes="seg" Classes.active="{Binding IsDocsSection}" Content="{l:L rv.docs}" Command="{Binding ShowSectionCommand}" CommandParameter="docs" Padding="12,6" />
+          </StackPanel>
+        </Border>
+
+        <Panel>
+          <ScrollViewer IsVisible="{Binding IsParamsSection}" Padding="10,8">
+            <StackPanel Spacing="6">
+              <views:KeyValueEditor DataContext="{Binding Params}" />
+              <TextBlock Classes="dim" FontSize="11" Text="{l:L rv.params.hint}" TextWrapping="Wrap" />
+            </StackPanel>
+          </ScrollViewer>
+          <ScrollViewer IsVisible="{Binding IsHeadersSection}" Padding="10,8">
+            <StackPanel Spacing="6">
+              <views:KeyValueEditor DataContext="{Binding Headers}" />
+              <TextBlock Classes="dim" FontSize="11" Text="{l:L rv.headers.hint}" TextWrapping="Wrap" />
+            </StackPanel>
+          </ScrollViewer>
+          <ScrollViewer IsVisible="{Binding IsAuthSection}" Padding="14,10">
+            <views:AuthView DataContext="{Binding Auth}" />
+          </ScrollViewer>
+          <DockPanel IsVisible="{Binding IsBodySection}">
+            <Border DockPanel.Dock="Top" Padding="10,6">
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Classes="flat" Content="{l:L rv.format}" Command="{Binding FormatBodyCommand}" Foreground="#8a8d93"
+                        IsVisible="{Binding IsRawBody}" ToolTip.Tip="{l:L rv.format.tip}" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Text="{l:L rv.bodyType}" Classes="dim" VerticalAlignment="Center" />
+                  <ComboBox ItemsSource="{Binding BodyTypes}" SelectedItem="{Binding BodyType}" MinWidth="190" />
+                </StackPanel>
+              </DockPanel>
+            </Border>
+            <Panel>
+              <ae:TextEditor x:Name="BodyEditor" IsVisible="{Binding IsRawBody}" ShowLineNumbers="True"
+                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
+              <ScrollViewer IsVisible="{Binding IsFormBody}" Padding="10,2,10,8">
+                <StackPanel Spacing="6">
+                  <views:KeyValueEditor DataContext="{Binding BodyFields}" />
+                  <TextBlock Classes="dim" FontSize="11" Text="{l:L rv.form.hint}" TextWrapping="Wrap" />
+                </StackPanel>
+              </ScrollViewer>
+              <TextBlock IsVisible="{Binding IsNoBody}" Classes="dim" FontStyle="Italic" Text="{l:L rv.noBody}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Panel>
+          </DockPanel>
+          <DockPanel IsVisible="{Binding IsTestsSection}">
+            <SelectableTextBlock DockPanel.Dock="Top" Margin="12,8,12,6" Foreground="#8a8d93" FontSize="11" TextWrapping="Wrap" Text="{l:L rv.tests.hint}" />
+            <TextBox Text="{Binding TestsText}" AcceptsReturn="True" Classes="mono" Margin="10,0,10,10" TextWrapping="NoWrap"
+                     VerticalContentAlignment="Top" Watermark="status == 200&#10;$.data.id exists&#10;set TOKEN = $.token" />
+          </DockPanel>
+          <TextBox IsVisible="{Binding IsDocsSection}" Text="{Binding Description}" AcceptsReturn="True" TextWrapping="Wrap" Margin="10"
+                   VerticalContentAlignment="Top" Watermark="{l:L rv.docs.watermark}" />
+        </Panel>
+      </DockPanel>
+
+      <GridSplitter Grid.Row="1" ResizeDirection="Rows" />
+
+      <!-- ================= Response ================= -->
+      <DockPanel Grid.Row="2">
+        <Border DockPanel.Dock="Top" Background="#26272b" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" Padding="10,5">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasResponse}">
+              <Button Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyResponseCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L rv.copyResponse.tip}" />
+              <Button Classes="flat" Content="{l:L rv.saveResponse.short}" Command="{Binding SaveResponseCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L rv.saveResponse}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <TextBlock Classes="section" Text="{l:L rv.response}" />
+              <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding HasResponse}">
+                <Border Classes="status" Background="{Binding StatusBrush}">
+                  <TextBlock Text="{Binding StatusText}" Foreground="White" FontWeight="SemiBold" FontSize="12" />
+                </Border>
+                <TextBlock Text="{Binding TimeText}" VerticalAlignment="Center" ToolTip.Tip="{l:L rv.time.tip}" />
+                <TextBlock Text="{Binding SizeText}" Classes="dim" VerticalAlignment="Center" ToolTip.Tip="{l:L rv.size.tip}" />
+                <TextBlock Text="{Binding TestsSummary}" Foreground="{Binding TestsSummaryBrush}" FontWeight="SemiBold" VerticalAlignment="Center"
+                           IsVisible="{Binding !!TestsSummary.Length}" ToolTip.Tip="{l:L rv.testsSummary.tip}" />
+              </StackPanel>
+              <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsSending}" Width="80" Height="4" VerticalAlignment="Center" />
+            </StackPanel>
+          </DockPanel>
+        </Border>
+        <Border DockPanel.Dock="Top" Background="#222327" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" IsVisible="{Binding HasResponse}">
+          <StackPanel Orientation="Horizontal">
+            <Button Classes="seg" Classes.active="{Binding IsBodyResponse}" Content="{l:L rv.body}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="body" Padding="12,5" />
+            <Button Classes="seg" Classes.active="{Binding IsHeadersResponse}" Content="{Binding ResponseHeadersTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="headers" Padding="12,5" />
+            <Button Classes="seg" Classes.active="{Binding IsCookiesResponse}" Content="{Binding ResponseCookiesTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="cookies" Padding="12,5" />
+            <Button Classes="seg" Classes.active="{Binding IsTestsResponse}" Content="{Binding ResponseTestsTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="tests" Padding="12,5" />
+          </StackPanel>
+        </Border>
+
+        <Panel Background="#1b1c1f">
+          <StackPanel IsVisible="{Binding !HasResponse}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="4" IsHitTestVisible="False">
+            <TextBlock Classes="dim" Text="{l:L rv.noResponse}" HorizontalAlignment="Center" />
+            <TextBlock Classes="dim" FontSize="11" Text="{l:L rv.noResponse.hint}" HorizontalAlignment="Center" />
+          </StackPanel>
+
+          <Panel IsVisible="{Binding HasResponse}">
+            <!-- Body -->
+            <Panel IsVisible="{Binding IsBodyResponse}">
+              <ae:TextEditor x:Name="ResponseEditor" ShowLineNumbers="True" IsReadOnly="True"
+                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
+              <StackPanel IsVisible="{Binding !!ResponseError}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" Margin="20" Background="#1b1c1f">
+                <TextBlock Text="{l:L rv.noAnswer}" Foreground="#e0645a" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                <SelectableTextBlock Text="{Binding ResponseError}" Foreground="#d4d4d4" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center" HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding ResponseUrl}" Classes="dim mono" FontSize="11" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520" />
+              </StackPanel>
+              <TextBlock IsVisible="{Binding !!ResponseNote.Length}" Text="{Binding ResponseNote}" Classes="dim" FontStyle="Italic"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" Background="#1b1c1f" Padding="10" />
+              <ScrollViewer IsVisible="{Binding !!ResponseImage}" HorizontalScrollBarVisibility="Auto" Background="#1b1c1f">
+                <Border Background="#26272b" BorderBrush="#3a3c42" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
+                  <Image Source="{Binding ResponseImage}" Stretch="None" />
+                </Border>
+              </ScrollViewer>
+            </Panel>
+            <!-- Headers -->
+            <ListBox IsVisible="{Binding IsHeadersResponse}" ItemsSource="{Binding ResponseHeaders}" Background="#1e1f22" x:Name="HeaderList">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:HeaderRow">
+                  <Grid ColumnDefinitions="220,*" Margin="10,3">
+                    <TextBlock Text="{Binding Key}" Classes="mono" FontSize="12" Foreground="#a8c8e8" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
+                    <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <!-- Cookies -->
+            <Panel IsVisible="{Binding IsCookiesResponse}" Background="#1e1f22">
+              <ListBox ItemsSource="{Binding ResponseCookies}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:CookieRow">
+                    <Grid ColumnDefinitions="180,*" Margin="10,3">
+                      <TextBlock Text="{Binding Name}" Classes="mono" FontSize="12" Foreground="#a8c8e8" TextTrimming="CharacterEllipsis" />
+                      <StackPanel Grid.Column="1">
+                        <SelectableTextBlock Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+                        <TextBlock Text="{Binding Attributes}" Classes="dim" FontSize="11" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <TextBlock Classes="dim" FontStyle="Italic" Text="{l:L rv.noCookies}" Margin="12,8" IsVisible="{Binding !ResponseCookies.Count}" />
+            </Panel>
+            <!-- Tests -->
+            <Panel IsVisible="{Binding IsTestsResponse}" Background="#1e1f22">
+              <ListBox ItemsSource="{Binding TestRows}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:TestRow">
+                    <DockPanel Margin="10,3">
+                      <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" Foreground="{Binding Brush}" FontWeight="Bold" Width="22" />
+                      <StackPanel>
+                        <TextBlock Text="{Binding Line}" Classes="mono" FontSize="12" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Detail}" Classes="dim" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
+                      </StackPanel>
+                    </DockPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <TextBlock Classes="dim" FontStyle="Italic" Text="{l:L rv.noTests}" Margin="12,8" IsVisible="{Binding !TestRows.Count}" TextWrapping="Wrap" />
+            </Panel>
+          </Panel>
+        </Panel>
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</UserControl>

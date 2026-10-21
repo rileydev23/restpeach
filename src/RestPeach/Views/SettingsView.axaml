@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:RestPeach.Services"
+             xmlns:vm="using:RestPeach.ViewModels"
+             xmlns:views="using:RestPeach.Views"
+             x:Class="RestPeach.Views.SettingsView"
+             x:DataType="vm:SettingsTab">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="#26272b" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" Padding="10,6">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Classes="accent" Content="{l:L common.save}" Command="{Binding SaveCommand}" IsEnabled="{Binding IsDirty}" ToolTip.Tip="Ctrl+S" />
+        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding FileText}" Classes="dim mono" FontSize="11" VerticalAlignment="Center" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <ScrollViewer Padding="14,10">
+      <StackPanel Spacing="10" MaxWidth="900" HorizontalAlignment="Left">
+        <!-- Collection only -->
+        <StackPanel Spacing="8" IsVisible="{Binding IsCollection}">
+          <TextBlock Classes="section" Text="{l:L set.general}" />
+          <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,6,Auto,6,Auto,6,Auto,6,Auto">
+            <TextBlock Text="{l:L set.name}" Classes="dim" VerticalAlignment="Center" />
+            <TextBox Grid.Column="1" Text="{Binding Name}" MaxWidth="360" HorizontalAlignment="Left" MinWidth="240" />
+            <TextBlock Grid.Row="2" Text="{l:L set.defaultEnv}" Classes="dim" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Environments}" SelectedItem="{Binding DefaultEnvironment}" MinWidth="240" />
+            <TextBlock Grid.Row="4" Text="{l:L set.timeout}" Classes="dim" VerticalAlignment="Center" />
+            <TextBox Grid.Row="4" Grid.Column="1" Classes="mono" Text="{Binding Timeout}" Width="120" HorizontalAlignment="Left" />
+            <CheckBox Grid.Row="6" Grid.Column="1" Content="{l:L set.redirects}" IsChecked="{Binding FollowRedirects}" />
+            <CheckBox Grid.Row="8" Grid.Column="1" Content="{l:L set.tls}" IsChecked="{Binding VerifyTls}" ToolTip.Tip="{l:L set.tls.tip}" />
+          </Grid>
+          <Border Height="1" Background="#3a3c42" Margin="0,6" />
+        </StackPanel>
+
+        <StackPanel Spacing="2">
+          <TextBlock Classes="section" Text="{l:L rv.auth}" />
+          <TextBlock Classes="dim" FontSize="12" Text="{Binding AuthHint}" TextWrapping="Wrap" />
+        </StackPanel>
+        <views:AuthView DataContext="{Binding Auth}" />
+
+        <Border Height="1" Background="#3a3c42" Margin="0,6" />
+        <StackPanel Spacing="2">
+          <TextBlock Classes="section" Text="{l:L set.variables}" />
+          <TextBlock Classes="dim" FontSize="12" Text="{l:L set.variables.hint}" TextWrapping="Wrap" />
+        </StackPanel>
+        <views:KeyValueEditor DataContext="{Binding Variables}" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

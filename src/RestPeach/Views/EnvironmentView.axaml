@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:RestPeach.Services"
+             xmlns:vm="using:RestPeach.ViewModels"
+             xmlns:views="using:RestPeach.Views"
+             x:Class="RestPeach.Views.EnvironmentView"
+             x:DataType="vm:EnvironmentTab">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="#26272b" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" Padding="10,6">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+          <Button Classes="accent" Content="{l:L common.save}" Command="{Binding SaveCommand}" IsEnabled="{Binding IsDirty}" ToolTip.Tip="Ctrl+S" />
+          <Button Content="{l:L env.makeDefault}" Command="{Binding MakeDefaultCommand}" IsVisible="{Binding !IsDefault}" ToolTip.Tip="{l:L env.makeDefault.tip}" />
+          <Button Content="⋯" Padding="10,4">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuItem Header="{l:L env.delete}" Command="{Binding DeleteCommand}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <TextBlock Text="{l:L env.name}" Classes="dim" VerticalAlignment="Center" />
+          <TextBox Text="{Binding Name}" MinWidth="200" />
+          <TextBlock Text="{l:L env.default}" Foreground="#6cc070" FontWeight="SemiBold" VerticalAlignment="Center" IsVisible="{Binding IsDefault}" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <ScrollViewer Padding="14,10">
+      <StackPanel Spacing="10" MaxWidth="900" HorizontalAlignment="Left">
+        <StackPanel Spacing="2">
+          <TextBlock Classes="section" Text="{l:L env.public}" />
+          <TextBlock Classes="dim mono" FontSize="11" Text="{Binding PublicFile}" />
+          <TextBlock Classes="dim" FontSize="12" Text="{l:L env.public.hint}" TextWrapping="Wrap" />
+        </StackPanel>
+        <views:KeyValueEditor DataContext="{Binding Variables}" />
+
+        <Border Height="1" Background="#3a3c42" Margin="0,6" />
+
+        <DockPanel>
+          <CheckBox DockPanel.Dock="Right" Content="{l:L env.showSecrets}" IsChecked="{Binding ShowSecrets}" />
+          <StackPanel Spacing="2">
+            <TextBlock Classes="section" Text="{l:L env.secrets}" Foreground="#9a7ae0" />
+            <TextBlock Classes="dim mono" FontSize="11" Text="{Binding SecretsFile}" />
+            <TextBlock Classes="dim" FontSize="12" Text="{l:L env.secrets.hint}" TextWrapping="Wrap" />
+          </StackPanel>
+        </DockPanel>
+        <views:KeyValueEditor DataContext="{Binding Secrets}" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

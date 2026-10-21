@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:RestPeach.Services"
+             xmlns:vm="using:RestPeach.ViewModels"
+             x:Class="RestPeach.Views.AuthView"
+             x:DataType="vm:AuthEditor">
+  <StackPanel Spacing="8" MaxWidth="640" HorizontalAlignment="Left">
+    <StackPanel Orientation="Horizontal" Spacing="10">
+      <TextBlock Text="{l:L auth.type}" Classes="dim" VerticalAlignment="Center" Width="90" />
+      <ComboBox ItemsSource="{Binding Types}" SelectedItem="{Binding Type}" MinWidth="200" />
+    </StackPanel>
+    <TextBlock Text="{Binding InheritedText}" Classes="dim" FontSize="12" IsVisible="{Binding IsInherit}" Margin="100,0,0,0" TextWrapping="Wrap" />
+    <TextBlock Text="{l:L auth.none.hint}" Classes="dim" FontSize="12" IsVisible="{Binding IsNone}" Margin="100,0,0,0" TextWrapping="Wrap" />
+
+    <Grid ColumnDefinitions="100,*" IsVisible="{Binding IsBearer}">
+      <TextBlock Text="Token" Classes="dim" VerticalAlignment="Center" />
+      <TextBox Grid.Column="1" Classes="mono" Text="{Binding Token}" Watermark="{}{{TOKEN}}" />
+    </Grid>
+
+    <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,6,Auto" IsVisible="{Binding IsBasic}">
+      <TextBlock Text="{l:L auth.username}" Classes="dim" VerticalAlignment="Center" />
+      <TextBox Grid.Column="1" Classes="mono" Text="{Binding Username}" />
+      <TextBlock Grid.Row="2" Text="{l:L auth.password}" Classes="dim" VerticalAlignment="Center" />
+      <TextBox Grid.Row="2" Grid.Column="1" Classes="mono" Text="{Binding Password}" Watermark="{}{{PASSWORD}}" />
+    </Grid>
+
+    <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,6,Auto,6,Auto" IsVisible="{Binding IsApiKey}">
+      <TextBlock Text="{l:L auth.key}" Classes="dim" VerticalAlignment="Center" />
+      <TextBox Grid.Column="1" Classes="mono" Text="{Binding Key}" Watermark="X-Api-Key" />
+      <TextBlock Grid.Row="2" Text="{l:L auth.value}" Classes="dim" VerticalAlignment="Center" />
+      <TextBox Grid.Row="2" Grid.Column="1" Classes="mono" Text="{Binding Value}" Watermark="{}{{API_KEY}}" />
+      <TextBlock Grid.Row="4" Text="{l:L auth.addTo}" Classes="dim" VerticalAlignment="Center" />
+      <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Locations}" SelectedItem="{Binding Location}" MinWidth="200" />
+    </Grid>
+
+    <TextBlock Text="{l:L auth.secretsHint}" Classes="dim" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
+               IsVisible="{Binding !IsInherit}" />
+  </StackPanel>
+</UserControl>

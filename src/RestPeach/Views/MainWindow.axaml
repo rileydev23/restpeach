@@ -1,0 +1,95 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:l="using:RestPeach.Services"
+        xmlns:vm="using:RestPeach.ViewModels"
+        xmlns:views="using:RestPeach.Views"
+        x:Class="RestPeach.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding WindowTitle}"
+        Icon="/Assets/app.ico"
+        MinWidth="800" MinHeight="500"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        DragDrop.AllowDrop="True">
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Ctrl+P" Command="{Binding QuickOpenCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+O" Command="{Binding QuickOpenProjectCommand}" />
+    <KeyBinding Gesture="Ctrl+W" Command="{Binding CloseCurrentCommand}" />
+    <KeyBinding Gesture="Ctrl+F4" Command="{Binding CloseCurrentCommand}" />
+    <KeyBinding Gesture="Ctrl+Tab" Command="{Binding NextTabCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+Tab" Command="{Binding PreviousTabCommand}" />
+    <KeyBinding Gesture="F1" Command="{Binding ShowAboutCommand}" />
+    <KeyBinding Gesture="Ctrl+D1" Command="{Binding SelectTabCommand}" CommandParameter="1" />
+    <KeyBinding Gesture="Ctrl+D2" Command="{Binding SelectTabCommand}" CommandParameter="2" />
+    <KeyBinding Gesture="Ctrl+D3" Command="{Binding SelectTabCommand}" CommandParameter="3" />
+    <KeyBinding Gesture="Ctrl+D4" Command="{Binding SelectTabCommand}" CommandParameter="4" />
+    <KeyBinding Gesture="Ctrl+D5" Command="{Binding SelectTabCommand}" CommandParameter="5" />
+    <KeyBinding Gesture="Ctrl+D6" Command="{Binding SelectTabCommand}" CommandParameter="6" />
+    <KeyBinding Gesture="Ctrl+D7" Command="{Binding SelectTabCommand}" CommandParameter="7" />
+    <KeyBinding Gesture="Ctrl+D8" Command="{Binding SelectTabCommand}" CommandParameter="8" />
+    <KeyBinding Gesture="Ctrl+D9" Command="{Binding SelectTabCommand}" CommandParameter="9" />
+  </Window.KeyBindings>
+
+  <!-- Maximized windows extend past the screen by the frame width; the margin keeps everything visible. -->
+  <DockPanel Margin="{Binding $parent[Window].OffScreenMargin}">
+    <!-- Title bar (our own, see docs/DISENO.md 6): icon + name + current project, drag area, window buttons. -->
+    <Border x:Name="TitleBar" DockPanel.Dock="Top" Classes="titlebar">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button x:Name="MinButton" Classes="caption" ToolTip.Tip="{l:L win.minimize}">
+            <Path Data="M0,5.5 H10" />
+          </Button>
+          <Button x:Name="MaxButton" Classes="caption" ToolTip.Tip="{l:L win.maximize}">
+            <Path x:Name="MaxGlyph" Data="M0.5,0.5 H9.5 V9.5 H0.5 Z" />
+          </Button>
+          <Button x:Name="CloseButton" Classes="caption close" ToolTip.Tip="{l:L common.close}">
+            <Path Data="M0.5,0.5 L9.5,9.5 M9.5,0.5 L0.5,9.5" />
+          </Button>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="9" Margin="14,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+          <Image Source="/Assets/icon64.png" Width="18" Height="18" />
+          <TextBlock Text="RestPeach" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Subtitle}" Classes="dim" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Tab strip -->
+    <Border DockPanel.Dock="Top" MinHeight="36" Background="#18191c" BorderBrush="#3a3c42" BorderThickness="0,0,0,1">
+      <DockPanel>
+      <Button DockPanel.Dock="Right" Classes="flat" Content="?" Command="{Binding ShowAboutCommand}"
+              ToolTip.Tip="{l:L main.about.tip}" Foreground="#8a8d93" Margin="0,0,8,0" VerticalAlignment="Center" />
+      <!-- Home: a fixed launcher, visually a level above the project tabs -->
+      <Button DockPanel.Dock="Left" Classes="home" Classes.active="{Binding IsHomeSelected}"
+              Command="{Binding ShowHomeCommand}" ToolTip.Tip="{l:L main.home.tip}">
+        <Grid RowDefinitions="*,Auto">
+          <TextBlock Text="{l:L main.home}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="18,0" />
+          <Border Grid.Row="1" Height="2" Background="#4a90d9" IsVisible="{Binding IsHomeSelected}" />
+        </Grid>
+      </Button>
+      <ListBox Classes="tabstrip" ItemsSource="{Binding ProjectTabs}" SelectedItem="{Binding SelectedProjectTab}" Margin="4,0,0,0">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ProjectViewModel">
+            <StackPanel Orientation="Horizontal" Margin="12,7,6,7" Spacing="8" ToolTip.Tip="{Binding ToolTip}">
+              <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+              <Button Classes="flat" Content="✕" Command="{Binding CloseCommand}" FontSize="10" Padding="4,1"
+                      Foreground="#8a8d93" VerticalAlignment="Center" ToolTip.Tip="{l:L main.close.tip}" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      </DockPanel>
+    </Border>
+
+    <ContentControl Content="{Binding SelectedTab}">
+      <ContentControl.DataTemplates>
+        <DataTemplate DataType="vm:HomeViewModel"><views:HomeView /></DataTemplate>
+        <DataTemplate DataType="vm:ProjectViewModel"><views:ProjectView /></DataTemplate>
+      </ContentControl.DataTemplates>
+    </ContentControl>
+  </DockPanel>
+</Window>

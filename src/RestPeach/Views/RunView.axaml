@@ -1,0 +1,167 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:RestPeach.Services"
+             xmlns:vm="using:RestPeach.ViewModels"
+             xmlns:ae="using:AvaloniaEdit"
+             x:Class="RestPeach.Views.RunView"
+             x:DataType="vm:RunTab">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="#26272b" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" Padding="10,6">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+          <CheckBox Content="{l:L run.bail}" IsChecked="{Binding Bail}" ToolTip.Tip="{l:L run.bail.tip}" Margin="0,0,8,0" />
+          <Button Classes="accent" Content="{l:L run.again}" Command="{Binding RunCommand}" IsVisible="{Binding !IsRunning}" ToolTip.Tip="Ctrl+Enter" />
+          <Button Content="{l:L run.stop}" Command="{Binding StopCommand}" IsVisible="{Binding IsRunning}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" ClipToBounds="True" Margin="0,0,12,0">
+          <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Summary}" Foreground="{Binding SummaryBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsRunning}" Width="80" Height="4" VerticalAlignment="Center" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Background="#222327" BorderBrush="#3a3c42" BorderThickness="0,1,0,0" Padding="10,5">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyCliCommand}" Foreground="#8a8d93" FontSize="11" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="{l:L run.cli}" Classes="dim" FontSize="11" VerticalAlignment="Center" />
+          <SelectableTextBlock Text="{Binding CliHint}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11" Foreground="#c8c8c8" VerticalAlignment="Center" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*" MinHeight="100" />
+        <RowDefinition Height="4" />
+        <RowDefinition Height="2*" MinHeight="140" />
+      </Grid.RowDefinitions>
+      <Panel>
+        <ListBox x:Name="Results" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:RunRow">
+              <Grid ColumnDefinitions="24,42,*,Auto,Auto,Auto" Margin="10,4">
+                <TextBlock Text="{Binding Glyph}" Foreground="{Binding GlyphBrush}" FontWeight="Bold" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Classes="method" Text="{Binding Method}" Foreground="{Binding MethodBrush}" />
+                <TextBlock Grid.Column="2" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding RelPath}" />
+                <TextBlock Grid.Column="3" Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" MinWidth="120" Margin="10,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="4" Text="{Binding Time}" Classes="dim" MinWidth="70" TextAlignment="Right" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="5" Text="{Binding Checks}" Classes="dim" MinWidth="50" TextAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{l:L run.checks.tip}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Classes="dim" Text="{l:L run.hint}" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !Rows.Count}" IsHitTestVisible="False" />
+      </Panel>
+      <GridSplitter Grid.Row="1" ResizeDirection="Rows" />
+      <!-- ================= Detail of the selected result ================= -->
+      <DockPanel Grid.Row="2" Background="#1b1c1f">
+        <Border DockPanel.Dock="Top" Background="#26272b" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" Padding="10,5" IsVisible="{Binding !!Selected}">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+              <Button Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyBodyCommand}" Foreground="#8a8d93"
+                      IsVisible="{Binding IsBodyDetail}" ToolTip.Tip="{l:L rv.copyResponse.tip}" />
+              <Button Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyBodyCommand}" Foreground="#8a8d93" IsVisible="{Binding IsSentDetail}" />
+              <Button Classes="flat" Content="{l:L rv.copyCurl}" Command="{Binding CopyCurlCommand}" Foreground="#8a8d93" IsVisible="{Binding Selected.WasSent, FallbackValue=False}" />
+              <Button Classes="flat" Content="{l:L run.open}" Command="{Binding OpenSelectedCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L run.open.tip}" />
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="12" Margin="12,0">
+              <Border Classes="status" Background="{Binding Selected.StatusBadgeBrush, FallbackValue={x:Null}}">
+                <TextBlock Text="{Binding Selected.Status, FallbackValue=''}" Foreground="White" FontWeight="SemiBold" FontSize="12" />
+              </Border>
+              <TextBlock Text="{Binding Selected.Time, FallbackValue=''}" VerticalAlignment="Center" ToolTip.Tip="{l:L rv.time.tip}" />
+              <TextBlock Text="{Binding Selected.Size, FallbackValue=''}" Classes="dim" VerticalAlignment="Center" ToolTip.Tip="{l:L rv.size.tip}" />
+            </StackPanel>
+            <TextBlock DockPanel.Dock="Left" Classes="method" Text="{Binding Selected.Method, FallbackValue=''}" Foreground="{Binding Selected.MethodBrush, FallbackValue={x:Null}}" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <TextBlock Text="{Binding Selected.Name, FallbackValue=''}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Selected.RelPath, FallbackValue=''}" />
+          </DockPanel>
+        </Border>
+        <Border DockPanel.Dock="Top" Background="#222327" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" IsVisible="{Binding !!Selected}">
+          <StackPanel Orientation="Horizontal">
+            <Button Classes="seg" Classes.active="{Binding IsTestsDetail}" Content="{Binding Selected.TestsTab, FallbackValue=''}" Command="{Binding ShowDetailCommand}" CommandParameter="tests" Padding="12,5" />
+            <Button Classes="seg" Classes.active="{Binding IsBodyDetail}" Content="{l:L rv.body}" Command="{Binding ShowDetailCommand}" CommandParameter="body" Padding="12,5" />
+            <Button Classes="seg" Classes.active="{Binding IsHeadersDetail}" Content="{Binding Selected.HeadersTab, FallbackValue=''}" Command="{Binding ShowDetailCommand}" CommandParameter="headers" Padding="12,5" />
+            <Button Classes="seg" Classes.active="{Binding IsSentDetail}" Content="{l:L run.sent}" Command="{Binding ShowDetailCommand}" CommandParameter="sent" Padding="12,5" ToolTip.Tip="{l:L run.sent.tip}" />
+          </StackPanel>
+        </Border>
+
+        <Panel>
+          <TextBlock Classes="dim" Text="{l:L run.pick}" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !Selected}" IsHitTestVisible="False" />
+
+          <!-- Tests (and errors) -->
+          <ListBox ItemsSource="{Binding Selected.Details, FallbackValue={x:Null}}" Background="#1e1f22" IsVisible="{Binding IsTestsDetail}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:TestRow">
+                <DockPanel Margin="10,3">
+                  <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" Foreground="{Binding Brush}" FontWeight="Bold" Width="22" />
+                  <StackPanel>
+                    <TextBlock Text="{Binding Line}" Classes="mono" FontSize="12" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Detail}" Classes="dim" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
+                  </StackPanel>
+                </DockPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <!-- Response body -->
+          <Panel IsVisible="{Binding IsBodyDetail}">
+            <ae:TextEditor x:Name="ResponseEditor" ShowLineNumbers="True" IsReadOnly="True" IsVisible="{Binding Selected.HasResponse, FallbackValue=False}"
+                           HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
+            <StackPanel IsVisible="{Binding Selected.HasFailure, FallbackValue=False}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" Margin="20" Background="#1b1c1f">
+              <TextBlock Text="{l:L rv.noAnswer}" Foreground="#e0645a" FontWeight="SemiBold" HorizontalAlignment="Center" />
+              <SelectableTextBlock Text="{Binding Selected.Failure, FallbackValue=''}" Foreground="#d4d4d4" TextWrapping="Wrap" MaxWidth="520" TextAlignment="Center" HorizontalAlignment="Center" />
+            </StackPanel>
+            <TextBlock IsVisible="{Binding !!ResponseNote.Length}" Text="{Binding ResponseNote}" Classes="dim" FontStyle="Italic"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Background="#1b1c1f" Padding="10" />
+            <ScrollViewer IsVisible="{Binding !!ResponseImage}" HorizontalScrollBarVisibility="Auto" Background="#1b1c1f">
+              <Border Background="#26272b" BorderBrush="#3a3c42" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
+                <Image Source="{Binding ResponseImage}" Stretch="None" />
+              </Border>
+            </ScrollViewer>
+          </Panel>
+
+          <!-- Response headers -->
+          <ListBox IsVisible="{Binding IsHeadersDetail}" ItemsSource="{Binding Selected.ResponseHeaders, FallbackValue={x:Null}}" Background="#1e1f22">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:HeaderRow">
+                <Grid ColumnDefinitions="220,*" Margin="10,3">
+                  <TextBlock Text="{Binding Key}" Classes="mono" FontSize="12" Foreground="#a8c8e8" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <!-- What was sent -->
+          <Grid IsVisible="{Binding IsSentDetail}" RowDefinitions="Auto,Auto,*" Background="#1e1f22">
+            <StackPanel Margin="10,8,10,4" Spacing="3">
+              <SelectableTextBlock Text="{Binding Selected.SentLine, FallbackValue=''}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+              <TextBlock Text="{Binding Selected.SentMissing, FallbackValue=''}" Foreground="#e0645a" FontSize="11" IsVisible="{Binding !!Selected.SentMissing.Length, FallbackValue=False}" />
+              <TextBlock Text="{Binding Selected.Failure, FallbackValue=''}" Foreground="#e0645a" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding !Selected.WasSent, FallbackValue=False}" />
+            </StackPanel>
+            <ScrollViewer Grid.Row="1" MaxHeight="180" IsVisible="{Binding Selected.WasSent, FallbackValue=False}">
+              <ItemsControl ItemsSource="{Binding Selected.SentHeaders, FallbackValue={x:Null}}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:HeaderRow">
+                    <Grid ColumnDefinitions="220,*" Margin="10,3">
+                      <TextBlock Text="{Binding Key}" Classes="mono" FontSize="12" Foreground="#a8c8e8" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
+                      <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <Border Grid.Row="2" BorderBrush="#3a3c42" BorderThickness="0,1,0,0" Margin="0,6,0,0" IsVisible="{Binding Selected.WasSent, FallbackValue=False}">
+              <Panel Background="#1b1c1f">
+                <ae:TextEditor x:Name="SentEditor" ShowLineNumbers="True" IsReadOnly="True"
+                               HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" />
+                <TextBlock IsVisible="{Binding !Selected.SentBody.Length, FallbackValue=False}" Text="{l:L run.noBodySent}" Classes="dim" FontStyle="Italic"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" Background="#1b1c1f" Padding="10" />
+              </Panel>
+            </Border>
+          </Grid>
+        </Panel>
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</UserControl>

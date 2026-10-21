@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:RestPeach.Services"
+             xmlns:vm="using:RestPeach.ViewModels"
+             x:Class="RestPeach.Views.KeyValueEditor"
+             x:DataType="vm:KeyValueTable">
+  <!-- A key/value table: the last row is always empty and typing in it adds the next one. -->
+  <ItemsControl ItemsSource="{Binding Rows}">
+    <ItemsControl.ItemTemplate>
+      <DataTemplate x:DataType="vm:KeyValueRow">
+        <Grid ColumnDefinitions="Auto,*,6,2*,Auto,Auto" Margin="0,0,0,4">
+          <CheckBox Classes="row" IsChecked="{Binding Active}" IsVisible="{Binding ShowActive}" Opacity="{Binding CheckOpacity}" VerticalAlignment="Center"
+                    ToolTip.Tip="{l:L kv.active.tip}" />
+          <TextBox Grid.Column="1" Classes="cell mono" Text="{Binding Key}" Watermark="{Binding KeyWatermark}"
+                   IsVisible="{Binding !HasSuggestions}" />
+          <AutoCompleteBox Grid.Column="1" Classes="cell" Text="{Binding Key, Mode=TwoWay}" ItemsSource="{Binding Suggestions}"
+                           FilterMode="StartsWith" Watermark="{Binding KeyWatermark}" IsVisible="{Binding HasSuggestions}"
+                           MinimumPrefixLength="1" FontFamily="Cascadia Mono, Consolas, Courier New" />
+          <TextBox Grid.Column="3" Classes="cell mono" Text="{Binding Value}" Watermark="{Binding ValueWatermark}"
+                   PasswordChar="{Binding PasswordChar}" />
+          <StackPanel Grid.Column="4" Orientation="Horizontal" IsVisible="{Binding ShowType}" Margin="4,0,0,0">
+            <Button Classes="flat" Content="{Binding TypeText}" Command="{Binding ToggleTypeCommand}" FontSize="11"
+                    Foreground="#8a8d93" MinWidth="54" ToolTip.Tip="{l:L kv.type.tip}" />
+            <Button Classes="flat" Content="…" Command="{Binding PickFileCommand}" IsVisible="{Binding IsFile}"
+                    ToolTip.Tip="{l:L kv.pickFile}" />
+          </StackPanel>
+          <Button Grid.Column="5" Classes="flat" Content="✕" Command="{Binding RemoveCommand}" FontSize="10" Foreground="#8a8d93"
+                  Opacity="{Binding CheckOpacity}" IsHitTestVisible="{Binding !IsPlaceholder}" ToolTip.Tip="{l:L kv.remove}" Margin="2,0,0,0" VerticalAlignment="Center" />
+        </Grid>
+      </DataTemplate>
+    </ItemsControl.ItemTemplate>
+  </ItemsControl>
+</UserControl>

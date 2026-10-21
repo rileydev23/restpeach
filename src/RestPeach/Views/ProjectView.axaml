@@ -1,0 +1,292 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:RestPeach.Services"
+             xmlns:vm="using:RestPeach.ViewModels"
+             xmlns:views="using:RestPeach.Views"
+             x:Class="RestPeach.Views.ProjectView"
+             x:DataType="vm:ProjectViewModel">
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="F5" Command="{Binding RefreshCommand}" />
+    <KeyBinding Gesture="Ctrl+N" Command="{Binding NewRequestCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+N" Command="{Binding NewFolderCommand}" />
+    <KeyBinding Gesture="Ctrl+Enter" Command="{Binding SendCurrentCommand}" />
+    <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCurrentCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveAllCommand}" />
+    <KeyBinding Gesture="Ctrl+L" Command="{Binding FocusUrlCommand}" />
+    <KeyBinding Gesture="Ctrl+D" Command="{Binding DuplicateCurrentCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+C" Command="{Binding CopyCurrentCurlCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+E" Command="{Binding FocusFilterCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+R" Command="{Binding RunCollectionCommand}" />
+    <KeyBinding Gesture="Ctrl+PageDown" Command="{Binding NextDocCommand}" />
+    <KeyBinding Gesture="Ctrl+PageUp" Command="{Binding PreviousDocCommand}" />
+    <KeyBinding Gesture="Ctrl+OemPlus" Command="{Binding ZoomInCommand}" />
+    <KeyBinding Gesture="Ctrl+Add" Command="{Binding ZoomInCommand}" />
+    <KeyBinding Gesture="Ctrl+OemMinus" Command="{Binding ZoomOutCommand}" />
+    <KeyBinding Gesture="Ctrl+Subtract" Command="{Binding ZoomOutCommand}" />
+    <KeyBinding Gesture="Ctrl+D0" Command="{Binding ZoomResetCommand}" />
+    <KeyBinding Gesture="Alt+Z" Command="{Binding ToggleWrapCommand}" />
+  </UserControl.KeyBindings>
+
+  <DockPanel>
+    <!-- Status bar -->
+    <Border DockPanel.Dock="Bottom" Background="#18191c" BorderBrush="#3a3c42" BorderThickness="0,1,0,0" Padding="10,3">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="14">
+          <TextBlock Classes="dim" Text="{Binding RuntimeText}" IsVisible="{Binding HasRuntime}" VerticalAlignment="Center"
+                     ToolTip.Tip="{l:L pv.runtime.tip}" />
+          <ToggleButton Classes="chip" Content="{l:L pv.pretty}" IsChecked="{Binding PrettyResponse}" ToolTip.Tip="{l:L pv.pretty.tip}" />
+          <Button Classes="flat" Content="{l:L pv.wrap}" Command="{Binding ToggleWrapCommand}" Foreground="#8a8d93" ToolTip.Tip="Alt+Z" Padding="4,0" />
+          <TextBlock Classes="dim" Text="{Binding Settings.FontSize, StringFormat='{}{0:0} px'}" VerticalAlignment="Center" ToolTip.Tip="Ctrl + / Ctrl − / Ctrl+0" />
+        </StackPanel>
+        <!-- Branch: shown only, never changed here. A click hands the repository to GitPeach. -->
+        <Button DockPanel.Dock="Left" Classes="flat branch" IsVisible="{Binding HasGit}" Command="{Binding OpenInGitPeachCommand}"
+                ToolTip.Tip="{Binding BranchTip}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Path Classes="branch" Data="M3,3.6 V12.4 M9,5.6 C9,8.6 3,8.4 3,11 M1.4,2 A1.6,1.6 0 1 1 4.6,2 A1.6,1.6 0 1 1 1.4,2 M7.4,4 A1.6,1.6 0 1 1 10.6,4 A1.6,1.6 0 1 1 7.4,4 M1.4,14 A1.6,1.6 0 1 1 4.6,14 A1.6,1.6 0 1 1 1.4,14" />
+            <TextBlock Text="{Binding BranchText}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding ChangesText}" Classes="dim" VerticalAlignment="Center" IsVisible="{Binding !!ChangesText.Length}" />
+          </StackPanel>
+        </Button>
+        <TextBlock DockPanel.Dock="Left" Classes="dim" Text="{l:L git.none}" IsVisible="{Binding ShowNoGit}"
+                   ToolTip.Tip="{Binding NoGitTip}" VerticalAlignment="Center" Margin="0,0,14,0" />
+        <TextBlock Classes="dim" Text="{Binding Notice}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
+    </Border>
+
+    <Panel>
+      <!-- ================= No collection yet ================= -->
+      <StackPanel IsVisible="{Binding !HasCollection}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" MaxWidth="560">
+        <Image Source="/Assets/icon64.png" Width="64" Height="64" Opacity="0.85" Margin="0,0,0,8" IsHitTestVisible="False" />
+        <TextBlock Text="{l:L pv.noCollection}" FontSize="16" HorizontalAlignment="Center" />
+        <TextBlock Classes="dim" Text="{l:L pv.noCollection.hint}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+        <TextBlock Classes="dim mono" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,6" TextAlignment="Left"
+                   Text=".api/&#10;  config.json&#10;  environments/local.env.json&#10;  .gitignore   ← .env.secrets.json" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+          <Button Classes="accent" Content="{l:L pv.init}" Command="{Binding InitCollectionCommand}" />
+          <Button Content="{l:L common.refresh}" Command="{Binding RefreshCommand}" ToolTip.Tip="F5" />
+        </StackPanel>
+      </StackPanel>
+
+      <!-- ================= Collection ================= -->
+      <DockPanel IsVisible="{Binding HasCollection}">
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#26272b" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" Padding="8,6">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+              <Button Content="TextPeach" Command="{Binding OpenProjectInTextPeachCommand}" ToolTip.Tip="{l:L pv.textpeach.tip}" />
+              <Button Content="{l:L pv.openFolder}" Command="{Binding OpenProjectFolderCommand}" ToolTip.Tip="{l:L pv.openFolder.tip}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" ClipToBounds="True">
+              <Button Classes="accent" Content="{l:L pv.newRequest}" Command="{Binding NewRequestCommand}" ToolTip.Tip="Ctrl+N" />
+              <Button Content="{l:L pv.newFolder}" Command="{Binding NewFolderCommand}" ToolTip.Tip="Ctrl+Shift+N" />
+              <Border Width="1" Background="#3a3c42" Margin="6,2" />
+              <Button Content="{l:L pv.import}" ToolTip.Tip="{l:L pv.import.tip}">
+                <Button.Flyout>
+                  <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                    <MenuItem Header="{l:L pv.import.file}" Command="{Binding ImportCommand}" />
+                    <MenuItem Header="{l:L pv.import.curl}" Command="{Binding ImportCurlCommand}" />
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+              <Button Content="{l:L pv.export}">
+                <Button.Flyout>
+                  <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                    <MenuItem Header="Postman 2.1…" Command="{Binding ExportCollectionCommand}" CommandParameter="postman" />
+                    <MenuItem Header="OpenAPI 3…" Command="{Binding ExportCollectionCommand}" CommandParameter="openapi" />
+                    <MenuItem Header="{l:L pv.menu.exportBash}" Command="{Binding ExportCollectionCommand}" CommandParameter="bash" />
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+              <Border Width="1" Background="#3a3c42" Margin="6,2" />
+              <Button Content="{l:L pv.run}" Command="{Binding RunCollectionCommand}" ToolTip.Tip="{l:L pv.run.tip}" />
+              <Button Content="{l:L pv.settings}" Command="{Binding CollectionSettingsCommand}" ToolTip.Tip="{l:L pv.settings.tip}" />
+              <Border Width="1" Background="#3a3c42" Margin="6,2" />
+              <TextBlock Text="{l:L pv.environment}" Classes="dim" VerticalAlignment="Center" Margin="2,0,4,0" />
+              <ComboBox ItemsSource="{Binding Environments}" SelectedItem="{Binding SelectedEnvironment}" MinWidth="130"
+                        ToolTip.Tip="{l:L pv.environment.tip}" />
+              <Button Content="{l:L pv.editEnv}" Command="{Binding EditEnvironmentCommand}" ToolTip.Tip="{l:L pv.editEnv.tip}" />
+              <Button Content="+" Command="{Binding NewEnvironmentCommand}" ToolTip.Tip="{l:L pv.newEnv.tip}" Padding="8,4" />
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="260" MinWidth="170" />
+            <ColumnDefinition Width="4" />
+            <ColumnDefinition Width="*" MinWidth="420" />
+            <ColumnDefinition Width="4" />
+            <ColumnDefinition Width="300" MinWidth="200" />
+          </Grid.ColumnDefinitions>
+
+          <!-- Sidebar: the collection as it is on disk -->
+          <Border Background="#222327">
+            <DockPanel>
+              <DockPanel DockPanel.Dock="Top" Margin="10,8,6,4">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                  <Button Classes="flat" Content="+" Command="{Binding NewRequestCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L pv.newRequest.tip}" />
+                  <Button Classes="flat" Content="⋯" Foreground="#8a8d93" x:Name="RootMenuButton" ToolTip.Tip="{l:L pv.collectionMenu.tip}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8" ToolTip.Tip="{l:L pv.collection.tip}" ClipToBounds="True">
+                  <TextBlock Classes="section" Text="{Binding CollectionName}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding RequestsText}" Foreground="#6cc070" FontSize="12" VerticalAlignment="Center" />
+                </StackPanel>
+              </DockPanel>
+              <TextBox x:Name="FilterBox" DockPanel.Dock="Top" Margin="6,0,6,6" Text="{Binding Filter}" Watermark="{l:L pv.filter}" />
+              <Panel>
+                <TreeView x:Name="Tree" ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedNode}" IsVisible="{Binding !IsFiltering}"
+                          DragDrop.AllowDrop="True">
+                  <TreeView.Styles>
+                    <Style Selector="TreeViewItem" x:DataType="vm:TreeNode">
+                      <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                    </Style>
+                  </TreeView.Styles>
+                  <TreeView.ItemTemplate>
+                    <TreeDataTemplate x:DataType="vm:TreeNode" ItemsSource="{Binding Children}">
+                      <DockPanel ToolTip.Tip="{Binding StatusTip}" Background="Transparent">
+                        <TextBlock DockPanel.Dock="Right" Classes="gitstatus" Text="{Binding StatusText}" Foreground="{Binding StatusBrush}" IsVisible="{Binding HasStatus}" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <TextBlock Text="■" Foreground="#e0a24a" FontSize="9" VerticalAlignment="Center" IsVisible="{Binding IsFolder}" />
+                          <TextBlock Classes="method" Text="{Binding MethodTag}" Foreground="{Binding MethodBrush}" MinWidth="30" IsVisible="{Binding IsRequest}" />
+                          <TextBlock Text="{Binding Name}" Foreground="{Binding Foreground}" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </DockPanel>
+                    </TreeDataTemplate>
+                  </TreeView.ItemTemplate>
+                </TreeView>
+                <ListBox x:Name="HitList" ItemsSource="{Binding FilterHits}" SelectedItem="{Binding SelectedHit}" IsVisible="{Binding IsFiltering}">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RequestHit">
+                      <DockPanel Margin="8,3">
+                        <TextBlock DockPanel.Dock="Left" Classes="method" Text="{Binding MethodTag}" Foreground="{Binding MethodBrush}" MinWidth="32" />
+                        <StackPanel>
+                          <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Text="{Binding Directory}" Classes="dim" FontSize="11" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                      </DockPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Classes="dim" FontSize="12" Margin="12,6" TextWrapping="Wrap" IsHitTestVisible="False"
+                           Text="{l:L pv.tree.empty}" IsVisible="{Binding !Tree.Count}" />
+              </Panel>
+            </DockPanel>
+          </Border>
+          <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+
+          <!-- Center: open documents -->
+          <DockPanel Grid.Column="2">
+            <Border DockPanel.Dock="Top" Background="#1e1f22" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" IsVisible="{Binding HasDocs}">
+              <ListBox x:Name="DocTabs" Classes="doctabs tabstrip" ItemsSource="{Binding Docs}" SelectedItem="{Binding SelectedDoc}">
+                <ListBox.ItemsPanel>
+                  <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="{l:L pv.closeOthers}" Command="{Binding CloseOthersCommand}" />
+                    <MenuItem Header="{l:L pv.closeAll}" Command="{Binding CloseAllCommand}" />
+                  </ContextMenu>
+                </ListBox.ContextMenu>
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:TabViewModel">
+                    <StackPanel Orientation="Horizontal" Margin="10,5,4,5" Spacing="6" ToolTip.Tip="{Binding ToolTip}">
+                      <TextBlock Classes="method" Text="{Binding Badge}" Foreground="{Binding BadgeBrush}" IsVisible="{Binding HasBadge}" />
+                      <TextBlock Text="{Binding Title}" FontSize="12" VerticalAlignment="Center" />
+                      <Button Classes="flat" Content="✕" Command="{Binding CloseCommand}" FontSize="9" Padding="4,1"
+                              Foreground="#8a8d93" VerticalAlignment="Center" ToolTip.Tip="{l:L main.close.tip}" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Border>
+
+            <Panel>
+              <StackPanel IsVisible="{Binding !HasDocs}" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" IsHitTestVisible="False" MaxWidth="460">
+                <Image Source="/Assets/icon64.png" Width="64" Height="64" Opacity="0.85" Margin="0,0,0,8" />
+                <TextBlock Text="{l:L pv.empty}" FontSize="16" HorizontalAlignment="Center" />
+                <TextBlock Classes="dim" Text="{l:L pv.empty.hint}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+              </StackPanel>
+              <ContentControl Content="{Binding SelectedDoc}">
+                <ContentControl.DataTemplates>
+                  <DataTemplate DataType="vm:RequestTab"><views:RequestView /></DataTemplate>
+                  <DataTemplate DataType="vm:EnvironmentTab"><views:EnvironmentView /></DataTemplate>
+                  <DataTemplate DataType="vm:SettingsTab"><views:SettingsView /></DataTemplate>
+                  <DataTemplate DataType="vm:RunTab"><views:RunView /></DataTemplate>
+                </ContentControl.DataTemplates>
+              </ContentControl>
+            </Panel>
+          </DockPanel>
+          <GridSplitter Grid.Column="3" ResizeDirection="Columns" />
+
+          <!-- Right: what the current request will use -->
+          <Border Grid.Column="4" Background="#222327">
+            <Grid RowDefinitions="Auto,2*,Auto,*,Auto,Auto">
+              <Border Padding="10,6">
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Classes="flat" Content="{l:L pv.editEnv}" Command="{Binding EditEnvironmentCommand}" Foreground="#8a8d93" FontSize="11" />
+                  <TextBlock Classes="section" Text="{Binding VariablesHeader}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:L pv.variables.tip}" />
+                </DockPanel>
+              </Border>
+              <Panel Grid.Row="1">
+                <ListBox ItemsSource="{Binding VariableRows}" x:Name="VariableList">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:VariableRow">
+                      <Grid ColumnDefinitions="*,Auto" Margin="10,2,8,2" ToolTip.Tip="{Binding Value}">
+                        <StackPanel>
+                          <TextBlock Text="{Binding Name}" Classes="mono" FontSize="12" Foreground="{Binding NameBrush}" FontWeight="{Binding Weight}" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Text="{Binding Value}" Classes="dim mono" FontSize="11" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding Source}" Foreground="{Binding SourceBrush}" FontSize="10" VerticalAlignment="Top" Margin="6,2,0,0" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Classes="dim" FontSize="12" Text="{l:L pv.noVariables}" Margin="10,4" IsVisible="{Binding !VariableRows.Count}" TextWrapping="Wrap" />
+              </Panel>
+
+              <Border Grid.Row="2" BorderBrush="#3a3c42" BorderThickness="0,1,0,0" Padding="10,6">
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyCurlPreviewCommand}" Foreground="#8a8d93" FontSize="11"
+                          IsVisible="{Binding HasCurl}" ToolTip.Tip="{l:L pv.copyCurl.tip}" />
+                  <TextBlock Classes="section" Text="cURL" />
+                </DockPanel>
+              </Border>
+              <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="10,0,10,6">
+                <Panel>
+                  <SelectableTextBlock Text="{Binding CurlPreview}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11" Foreground="#c8c8c8"
+                                       SelectionBrush="#33507a" IsVisible="{Binding HasCurl}" />
+                  <TextBlock Classes="dim" FontSize="12" Text="{l:L pv.curl.empty}" IsVisible="{Binding !HasCurl}" TextWrapping="Wrap" />
+                </Panel>
+              </ScrollViewer>
+
+              <Border Grid.Row="4" BorderBrush="#3a3c42" BorderThickness="0,1,0,0" Padding="10,6">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Classes="flat" Content="{l:L pv.clearRuntime}" Command="{Binding ClearRuntimeCommand}" Foreground="#8a8d93" FontSize="11"
+                            IsVisible="{Binding HasRuntime}" ToolTip.Tip="{l:L pv.runtime.tip}" />
+                    <Button Classes="flat" Content="{l:L pv.clearCookies}" Command="{Binding ClearCookiesCommand}" Foreground="#8a8d93" FontSize="11"
+                            IsVisible="{Binding HasCookies}" />
+                  </StackPanel>
+                  <TextBlock Classes="section" Text="{l:L pv.session}" ToolTip.Tip="{l:L pv.session.tip}" />
+                </DockPanel>
+              </Border>
+              <Panel Grid.Row="5" MaxHeight="160">
+                <ListBox ItemsSource="{Binding JarCookies}" IsVisible="{Binding HasCookies}">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CookieRow">
+                      <StackPanel Margin="10,2,8,2" ToolTip.Tip="{Binding Value}">
+                        <TextBlock Text="{Binding Name}" Classes="mono" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Attributes}" Classes="dim" FontSize="11" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock Classes="dim" FontSize="12" Text="{l:L pv.noCookies}" Margin="10,0,10,8" IsVisible="{Binding !HasCookies}" TextWrapping="Wrap" />
+              </Panel>
+            </Grid>
+          </Border>
+        </Grid>
+      </DockPanel>
+    </Panel>
+  </DockPanel>
+</UserControl>
