@@ -109,7 +109,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [ObservableProperty] private string _url = "";
     [ObservableProperty] private string _description = "";
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRawBody), nameof(IsFormBody), nameof(IsNoBody), nameof(BodyExtension), nameof(IsGraphQLBody), nameof(IsEditorBody), nameof(IsBinaryBody))]
+    [NotifyPropertyChangedFor(nameof(IsRawBody), nameof(IsFormBody), nameof(IsNoBody), nameof(BodyExtension), nameof(IsGraphQLBody), nameof(IsEditorBody), nameof(IsBinaryBody), nameof(MessageType))]
     private Choice _bodyType;
     /// <summary>Binary body: the file sent, relative to the collection when it is inside it.</summary>
     [ObservableProperty] private string _binaryPath = "";
@@ -205,6 +205,16 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     }
 
     public IBrush MethodBrush => Look.Method(Method);
+    /// <summary>
+    /// The WebSocket message type combo's own view of <see cref="BodyType"/>. That combo only lists JSON and text, and
+    /// when the body is anything else it would write null back into BodyType; this ignores that.
+    /// </summary>
+    public Choice? MessageType
+    {
+        get => MessageTypes.Contains(BodyType) ? BodyType : null;
+        set { if (value is not null) BodyType = value; }
+    }
+
     public bool IsRawBody => Core.Model.BodyTypes.IsRaw(BodyType.Value);
     public bool IsFormBody => Core.Model.BodyTypes.IsForm(BodyType.Value);
     public bool IsNoBody => BodyType.Value == Core.Model.BodyTypes.None;

@@ -454,6 +454,7 @@ public sealed class HttpEngine : IDisposable
         {
             if (f.IsFile)
             {
+                if (f.Value.Length == 0) throw new IOException(Loc.F("net.noFileChosen", f.Key));
                 var file = new ByteArrayContent(File.ReadAllBytes(f.Value));
                 file.Headers.ContentType = new MediaTypeHeaderValue(MimeFor(f.Value));
                 m.Add(file, f.Key, Path.GetFileName(f.Value));

@@ -113,6 +113,19 @@ public sealed class HttpTests : IDisposable
     }
 
     [Fact]
+    public async Task Form_file_field_without_a_file_says_which_field()
+    {
+        var req = new ApiRequest
+        {
+            Method = "POST", Url = _base + "echo",
+            Body = new BodySpec { Type = BodyTypes.FormData, Fields = { new KeyValue { Key = "upload", Value = "", Type = "file" } } },
+        };
+        using var engine = new HttpEngine();
+        var res = await engine.SendAsync(RequestPreparer.Prepare(req, AuthSpec.None(), new VariableScope()), new HttpOptions(), CancellationToken.None);
+        Assert.Contains("\"upload\"", res.Error);
+    }
+
+    [Fact]
     public async Task Connection_errors_are_reported_not_thrown()
     {
         using var engine = new HttpEngine();

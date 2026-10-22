@@ -150,6 +150,16 @@ public static class Importer
                 created++;
             }
         }
+
+        // An environment beats a folder: a BASE_URL the project already had would silently send every imported request
+        // somewhere else, so say so.
+        foreach (var stem in result.Root.Config.Variables.Count > 0 ? ws.ListEnvironments() : Enumerable.Empty<string>())
+        {
+            var env = ws.LoadEnvironment(stem);
+            foreach (var (k, v) in result.Root.Config.Variables)
+                if ((env.Secrets.TryGetValue(k, out var e) || env.Variables.TryGetValue(k, out e)) && e != v)
+                    result.Warnings.Add(Loc.F("imp.shadowed", k, env.DisplayName, e, v));
+        }
         return new ImportSummary(top, requests, folders, created, merged);
     }
 
