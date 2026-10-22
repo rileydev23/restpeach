@@ -1,5 +1,7 @@
 # Publishing a release (from the draft kept by release-drafter.yml) builds RestPeach and restpeach-cli for Windows
-# and Linux with the release's version, checks that each build starts, and attaches them to the release.
+# and Linux with the release's version, checks that each build starts, builds the app's installers
+# (RestPeach-Setup.exe and the install.sh in the Linux archive), checks that they install and uninstall, and
+# attaches everything to the release.
 name: Release
 
 on:
@@ -12,6 +14,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,13 +41,44 @@ jobs:
           Start-Sleep -Seconds 15
           if ($p.HasExited) { throw "RestPeach.exe exited at startup with code $($p.ExitCode)" }
           Stop-Process -Id $p.Id -Force
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; if ($LASTEXITCODE) { exit 1 } }
+          $version = "${{ github.event.release.tag_name }}".TrimStart('v')
+          & $iscc /Qp "/DAppVersion=$version" installer\RestPeach.iss
+          if ($LASTEXITCODE) { throw "ISCC failed with code $LASTEXITCODE" }
+      - name: Check that the installer installs, registers and uninstalls
+        shell: pwsh
+        run: |
+          # Not Start-Process -Wait: it also waits for child processes, and the silent install leaves RestPeach running.
+          $setup = Start-Process dist\RestPeach-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
+          if (-not $setup.WaitForExit(300000)) { throw "The installer did not finish in 5 minutes" }
+          if ($setup.ExitCode -ne 0) { throw "The installer exited with code $($setup.ExitCode)" }
+          $app = "$env:LOCALAPPDATA\Programs\RestPeach"
+          $lnk = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\RestPeach.lnk"
+          foreach ($f in "$app\RestPeach.exe", "$app\installed.txt", "$app\unins000.exe", $lnk) {
+            if (-not (Test-Path $f)) { throw "Missing after install: $f" }
+          }
+          # The silent install opens RestPeach (that is how an update restarts it): it must still be running.
+          Start-Sleep -Seconds 15
+          $p = Get-Process RestPeach -ErrorAction SilentlyContinue
+          if (-not $p) { throw "RestPeach did not start after the silent install" }
+          $p | Stop-Process -Force
+          # The uninstaller hands over to a copy of itself in %TEMP% and exits at once, so poll for the result.
+          Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES'
+          $deadline = (Get-Date).AddMinutes(2)
+          while (((Test-Path "$app\RestPeach.exe") -or (Test-Path $lnk)) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+          if ((Test-Path "$app\RestPeach.exe") -or (Test-Path $lnk)) { throw "Uninstall left files behind" }
       - name: Attach them to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/RestPeach.exe dist/restpeach-cli.exe --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/RestPeach.exe dist/RestPeach-Setup.exe dist/restpeach-cli.exe --clobber
 
   linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,10 +105,26 @@ jobs:
           xvfb-run -a timeout 15 dist/RestPeach
           code=$?
           if [ $code -ne 124 ]; then echo "::error::RestPeach exited at startup with code $code"; exit 1; fi
-      - name: Package them
+      - name: Package them (the app with its installer)
         run: |
-          tar -czf RestPeach-linux-x64.tar.gz -C dist RestPeach
+          cp installer/linux/install.sh installer/linux/uninstall.sh installer/installed.txt dist/
+          cp src/RestPeach/Assets/logo.png dist/restpeach.png
+          chmod +x dist/install.sh dist/uninstall.sh
+          tar -czf RestPeach-linux-x64.tar.gz -C dist RestPeach install.sh uninstall.sh installed.txt restpeach.png
           tar -czf restpeach-cli-linux-x64.tar.gz -C dist restpeach-cli
+      - name: Check that install.sh and uninstall.sh work
+        run: |
+          mkdir -p /tmp/rp && tar -xzf RestPeach-linux-x64.tar.gz -C /tmp/rp
+          /tmp/rp/install.sh
+          test -x ~/.local/opt/restpeach/RestPeach
+          test -f ~/.local/opt/restpeach/installed.txt
+          test -f ~/.local/share/applications/restpeach.desktop
+          test -f ~/.local/share/icons/hicolor/256x256/apps/restpeach.png
+          test -L ~/.local/bin/restpeach
+          if command -v desktop-file-validate >/dev/null; then desktop-file-validate ~/.local/share/applications/restpeach.desktop; fi
+          ~/.local/opt/restpeach/uninstall.sh
+          test ! -e ~/.local/opt/restpeach
+          test ! -e ~/.local/share/applications/restpeach.desktop
       - name: Attach them to the release
         env:
           GH_TOKEN: ${{ github.token }}

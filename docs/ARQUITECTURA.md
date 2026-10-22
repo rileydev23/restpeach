@@ -55,7 +55,7 @@ MainWindowViewModel ─┬─ HomeViewModel (proyectos y grupos)
 
 | Carpeta | Responsabilidad |
 |---|---|
-| `Services/` | `ProjectStore` (state.json), `ProjectScanner` (tipo de proyecto, colecciones), `ProjectGrouping` (grupos, puro y testeado), `GitStatus` (rama y cambios, solo lectura), `PeachApps` + `PeachLocator` (carpeta compartida y dónde están GitPeach y TextPeach), `SingleInstance`, `Highlighting` (TextMate + `peach-dark.json`), `L` (la extensión `{l:L clave}`). |
+| `Services/` | `ProjectStore` (state.json), `ProjectScanner` (tipo de proyecto, colecciones), `ProjectGrouping` (grupos, puro y testeado), `GitStatus` (rama y cambios, solo lectura), `PeachApps` + `PeachLocator` (carpeta compartida y dónde están GitPeach y TextPeach), `Updater` (releases de GitHub, descarga verificada y reemplazo del exe en uso), `SingleInstance`, `Highlighting` (TextMate + `peach-dark.json`), `L` (la extensión `{l:L clave}`). |
 | `ViewModels/` | Estado de pantalla. `ProjectViewModel` implementa `ICollectionHost`: el `Workspace`, el entorno elegido, el `Runtime` de la sesión y el `HttpEngine` que comparten todas sus pestañas. |
 | `Views/` | XAML de Avalonia. `RequestView` y `RunView` usan AvaloniaEdit; los `TextDocument` pertenecen a la pestaña y la vista solo los engancha, porque Avalonia recicla la vista entre pestañas del mismo tipo. |
 | `Controls/` | `Palette` (colores de la familia) y `Look` (colores de métodos, estados y orígenes de variables). |

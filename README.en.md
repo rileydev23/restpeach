@@ -68,7 +68,8 @@ RestPeach turns that around:
 - **Easy to switch.** Imports Postman 2.1, Insomnia 4, OpenAPI 3.x and cURL commands.
 
 A new teammate clones the repository, opens the folder and already has every endpoint with its variables.
-No invitations, no accounts, no telemetry. A single portable executable, in English and Spanish.
+No invitations, no accounts, no telemetry. A single portable executable (or an installer), in English and
+Spanish.
 
 ## Screenshots
 
@@ -127,9 +128,24 @@ No invitations, no accounts, no telemetry. A single portable executable, in Engl
    | **Linux** | `RestPeach-linux-x64.tar.gz` | `restpeach-cli-linux-x64.tar.gz` |
 
    On Linux, unpack it with `tar -xzf RestPeach-linux-x64.tar.gz`.
-2. Put it in any folder and run it. There is no installer.
+2. For the app there are two ways:
+   - **Portable:** put `RestPeach.exe` (or `RestPeach` on Linux) in any folder and run it.
+   - **Installed:** on Windows, `RestPeach-Setup.exe` (also in *Releases*) installs it for your user only, with
+     no administrator, into `%LOCALAPPDATA%\Programs\RestPeach`; it shows up in Start menu search and is
+     uninstalled from **Settings > Apps**. On Linux, `./install.sh` (inside the `.tar.gz`) installs it without
+     root into `~/.local/opt/restpeach`, with a `restpeach` command and an entry in the app menu; remove it with
+     `~/.local/opt/restpeach/uninstall.sh`. Uninstalling never deletes your data.
 3. *(Optional)* **Portable mode:** create an empty `portable.txt` file next to the executable and the data
    will be stored in `.\data\` instead of your profile.
+
+### Updates
+
+Once a day, when it opens, RestPeach asks GitHub whether there is a new version. If there is, a **↑ 1.2.0**
+button appears next to **?**; nothing else changes. Clicking it shows what is new and lets you choose
+**Update and restart**, **Not now** or **Skip this version**. Updating checks the download against its SHA-256,
+restarts RestPeach and reopens your tabs. If you used the installer, it updates by running the new installer
+silently. In **About** (F1) you can turn the automatic check off or check right away. `restpeach-cli` does not
+update itself: in CI, pin the version you download.
 
 ## Getting started
 
@@ -310,8 +326,9 @@ latest release, with no .NET install:
 
 ## Data, privacy and portable mode
 
-- **No network but your requests.** RestPeach has no accounts, telemetry, auto-updates or sync. The only
-  connection it makes is the request you send.
+- **No network but your requests.** RestPeach has no accounts, telemetry or sync. Besides the requests you send,
+  it only asks GitHub's public API for the latest RestPeach release, at most once a day (can be turned off in
+  **About**), and downloads it only if you ask. It sends nothing about you.
 - **Your collections** are in your repositories. **The app's settings** (projects, groups, tabs, window size,
   language) are in `%APPDATA%\peachapps\RestPeach\state.json` (on Linux,
   `~/.config/peachapps/RestPeach/state.json`). **About** (F1) shows the exact path.

@@ -7,6 +7,8 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Restarted by an update: the previous process has to be gone before we claim the single instance.
+        args = Services.Updater.WaitForPreviousInstance(args);
         // A second launch (GitPeach or TextPeach opening a project, for instance) forwards its paths and exits.
         if (!Services.SingleInstance.TryBecomePrimary(args)) return;
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

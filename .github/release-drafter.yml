@@ -47,8 +47,9 @@ version-resolver:
 template: |
   $CHANGES
 
-  **Download / Descarga** (portable, no installation needed / portable, no requiere instalación):
-  - Windows: `RestPeach.exe` (app) · `restpeach-cli.exe` (CI)
-  - Linux: `RestPeach-linux-x64.tar.gz` (`tar -xzf RestPeach-linux-x64.tar.gz && ./RestPeach`) · `restpeach-cli-linux-x64.tar.gz` (CI)
+  **Download / Descarga**
+  - Windows, installer / instalador: `RestPeach-Setup.exe` (Start menu and Settings > Apps, no admin / menú Inicio y Configuración > Aplicaciones, sin administrador)
+  - Windows, portable: `RestPeach.exe` (app) · `restpeach-cli.exe` (CI)
+  - Linux: `RestPeach-linux-x64.tar.gz`: portable `./RestPeach`, or install / o instalar `./install.sh` (app menu / menú de aplicaciones) · `restpeach-cli-linux-x64.tar.gz` (CI)
 
   **Full changelog:** https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
