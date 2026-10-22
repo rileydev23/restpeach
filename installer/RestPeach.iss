@@ -1,7 +1,7 @@
-; Windows installer: RestPeach-Setup.exe (Inno Setup 6). Per user, no administrator: installs the same portable exe
+; Windows installer: restpeach-windows-x64-setup.exe (Inno Setup 6). Per user, no administrator: installs the same portable exe
 ; into %LOCALAPPDATA%\Programs\RestPeach, adds it to the Start menu (so Windows search finds it) and to
 ; Settings > Apps with its uninstaller. Settings in %APPDATA%\peachapps\RestPeach are kept on uninstall.
-; Build after build.cmd:  iscc /DAppVersion=1.2.3 installer\RestPeach.iss   ->  dist\RestPeach-Setup.exe
+; Build after build.cmd:  iscc /DAppVersion=1.2.3 installer\RestPeach.iss   ->  dist\restpeach-windows-x64-setup.exe
 ; The app updates itself by running a newer setup with /SILENT; installed.txt tells it that it was installed.
 
 #ifndef AppVersion
@@ -24,7 +24,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist
-OutputBaseFilename=RestPeach-Setup
+OutputBaseFilename=restpeach-windows-x64-setup
 SetupIconFile=..\src\RestPeach\Assets\app.ico
 UninstallDisplayIcon={app}\RestPeach.exe
 UninstallDisplayName=RestPeach

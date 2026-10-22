@@ -56,7 +56,7 @@
 12. **Lo que solo se lee nunca parece editable.** Respuestas, lo **Enviado**, mensajes y atajos usan
     `TextBlock`/`SelectableTextBlock` o un editor de solo lectura; `TextBox` es solo para escribir.
 13. **Portable y autocontenido.** `RestPeach.exe` y `restpeach-cli.exe` funcionan sin instalar; con `portable.txt`
-    al lado, los datos se guardan junto al exe. El instalador de la app (`RestPeach-Setup.exe`, `install.sh`) es
+    al lado, los datos se guardan junto al exe. El instalador de la app (`restpeach-windows-x64-setup.exe`, `install.sh`) es
     opcional: copia ese mismo exe a una carpeta del usuario, lo registra en el buscador del sistema y deja
     `installed.txt` al lado.
 14. **Actualizar no interrumpe.** Una versión nueva solo se nota como un botón **↑ x.y.z** junto al **?**; nada
