@@ -168,7 +168,10 @@ internal static class Program
     private static void PrintResult(RunResult r, int width, bool verbose)
     {
         var mark = r.Passed ? Paint("✓", Green) : Paint("✗", Red);
-        var name = Display(r.RelPath).PadRight(width);
+        // A name longer than the column is cut (keeping its end, the request's own name) so the status never touches it.
+        var shown = Display(r.RelPath);
+        if (shown.Length > width - 2) shown = "…" + shown[^(width - 3)..];
+        var name = shown.PadRight(width);
         if (r.Error is not null || r.Response?.Error is { } _)
         {
             Console.WriteLine($"  {mark} {name}{Paint(Loc.T("cli.error") + ": " + (r.Error ?? r.Response!.Error), Red)}");

@@ -181,6 +181,18 @@ public class ImportExportTests
     }
 
     [Fact]
+    public void Import_warns_when_an_environment_hides_an_imported_variable()
+    {
+        using var tmp = new TempDir();
+        var ws = Workspace.Init(tmp.Path, "demo"); // its "Local" environment has BASE_URL = http://localhost:8080
+        var result = Importer.Import(OpenApi);
+        Importer.Write(ws, result, "");
+        var w = Assert.Single(result.Warnings, x => x.StartsWith("BASE_URL:"));
+        Assert.Contains("http://localhost:8080", w);
+        Assert.Contains("https://api.pets.test/v1", w);
+    }
+
+    [Fact]
     public void Bash_export_reads_variables_from_the_environment()
     {
         using var tmp = new TempDir();
