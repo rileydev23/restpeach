@@ -5,7 +5,7 @@
 <h1 align="center">RestPeach</h1>
 
 <p align="center">
-  Cliente de APIs para Windows, <b>local y nativo de git</b>.<br/>
+  Cliente de APIs para Windows y Linux, <b>local y nativo de git</b>.<br/>
   Las peticiones viven en tu repositorio como archivos de texto: se envían, se prueban, se revisan en el diff y se ejecutan en CI, sin cuentas ni nube.
 </p>
 
@@ -24,7 +24,8 @@
 - [¿Por qué RestPeach?](#por-qué-restpeach)
 - [Capturas](#capturas)
 - [Características](#características)
-- [Requisitos e instalación](#requisitos-e-instalación)
+- [Requisitos](#requisitos)
+- [Instalación](#instalación)
 - [Primeros pasos](#primeros-pasos)
 - [Cómo funciona](#cómo-funciona)
   - [La colección es una carpeta](#la-colección-es-una-carpeta)
@@ -41,6 +42,7 @@
 - [Compilar desde el código](#compilar-desde-el-código)
 - [Estructura del repositorio](#estructura-del-repositorio)
 - [Contribuir](#contribuir)
+- [Versiones y releases](#versiones-y-releases)
 - [Licencia y créditos](#licencia-y-créditos)
 
 ---
@@ -66,7 +68,7 @@ RestPeach invierte eso:
 - **Sin fricción para llegar.** Importa Postman 2.1, Insomnia 4, OpenAPI 3.x y comandos cURL.
 
 Un nuevo integrante clona el repositorio, abre la carpeta y ya tiene todos los endpoints con sus variables.
-Sin invitaciones, sin cuentas, sin telemetría. Es un único `.exe` portable, en español y en inglés.
+Sin invitaciones, sin cuentas, sin telemetría. Es un único ejecutable portable, en español y en inglés.
 
 ## Capturas
 
@@ -79,6 +81,11 @@ Sin invitaciones, sin cuentas, sin telemetría. Es un único `.exe` portable, en
   <img src="docs/img/run.png" alt="Ejecución de la colección con el detalle de lo que se envió" /><br/>
   <sub><b>Ejecutar la colección:</b> resultados en orden y, al elegir uno, sus pruebas, la respuesta y lo que se envió de verdad.</sub>
 </p>
+
+| | |
+|---|---|
+| ![WebSocket conectado con mensajes guardados y el registro de lo enviado y recibido](docs/img/websocket.png) | ![Acerca de RestPeach con los atajos de teclado y el idioma](docs/img/about.png) |
+| **WebSockets:** mensajes guardados con la petición y el registro de lo enviado ↑ y recibido ↓. | **Acerca de (F1):** atajos de teclado, idioma y dónde se guarda la configuración. |
 
 ## Características
 
@@ -101,14 +108,33 @@ Sin invitaciones, sin cuentas, sin telemetría. Es un único `.exe` portable, en
 | **Disco** | Un *watcher* recarga el árbol y los entornos cuando algo cambia afuera (un `git pull`, otro editor, un agente de IA). |
 | **CLI** | `restpeach-cli run / import / export / envs / init` para CI y scripts. |
 
-## Requisitos e instalación
+## Requisitos
 
-- Windows 10 u 11 (x64). Nada más: el `.exe` es autocontenido (no necesita .NET instalado).
-- Descarga `RestPeach.exe` (y, si lo usarás en CI, `restpeach-cli.exe`) y ejecútalo. No hay instalador.
+- **Para usarlo:** Windows 10 u 11 de 64 bits, o Linux x64 con escritorio (X11 o XWayland). No necesita .NET
+  instalado (los ejecutables son autocontenidos). `restpeach-cli` no necesita escritorio.
+- **Para ver la rama y los cambios:** [Git para Windows](https://git-scm.com/download/win) en el `PATH` (o en
+  su carpeta de instalación habitual); en Linux, el `git` de tu distribución. Sin git, RestPeach funciona
+  igual, solo que sin esa información.
+- **Para compilarlo:** [SDK de .NET 10](https://dotnet.microsoft.com/download).
+
+## Instalación
+
+1. Descarga desde la sección *Releases* del repositorio (o compílalo, ver
+   [Compilar desde el código](#compilar-desde-el-código)):
+
+   | | App | CLI (para CI) |
+   |---|---|---|
+   | **Windows** | `RestPeach.exe` | `restpeach-cli.exe` |
+   | **Linux** | `RestPeach-linux-x64.tar.gz` | `restpeach-cli-linux-x64.tar.gz` |
+
+   En Linux, descomprímelo con `tar -xzf RestPeach-linux-x64.tar.gz`.
+2. Ponlo en la carpeta que quieras y ejecútalo. No hay instalador.
+3. *(Opcional)* **Modo portable:** crea un archivo vacío `portable.txt` junto al ejecutable y los datos se
+   guardarán en `.\data\` en lugar de en tu perfil.
 
 ## Primeros pasos
 
-1. Abre `RestPeach.exe` y pulsa **Agregar proyecto…** (o arrastra una carpeta a la ventana).
+1. Abre RestPeach y pulsa **Agregar proyecto…** (o arrastra una carpeta a la ventana).
 2. Si el proyecto aún no tiene colección, RestPeach ofrece crearla: escribe `.api/config.json`, el entorno
    `local`, el `.gitignore` de los secretos y un `.gitattributes`.
 3. **Nueva petición** (Ctrl+N), escribe la URL y pulsa **Enviar** (Ctrl+Enter). **Guardar** (Ctrl+S) la
@@ -225,7 +251,8 @@ barra de estado; al hacer clic en la rama se abre [GitPeach](https://github.com/
 repositorio. El botón **TextPeach** abre la petición (o el proyecto) en
 [TextPeach](https://github.com/rileydev23/textpeach) para leerla con calma.
 
-Las tres apps comparten el diseño, los grupos de proyectos y la carpeta `%APPDATA%\peachapps\`, donde cada
+Las tres apps comparten el diseño, los grupos de proyectos y la carpeta `%APPDATA%\peachapps\` (en Linux,
+`~/.config/peachapps/`), donde cada
 una anuncia dónde está instalada (`location.json`). Así se encuentran entre sí sin instaladores ni registro.
 Abrir una carpeta desde otra app de la familia la abre en la ventana de RestPeach que ya esté abierta.
 
@@ -243,10 +270,15 @@ restpeach-cli init [ruta]
 carpeta actual). Código de salida: **0** si todo pasó, **1** si algo falló, **2** si los argumentos son
 incorrectos. Idioma: `RESTPEACH_LANG=en|es`. Sin colores: `--no-color` o `NO_COLOR`.
 
-En CI, los secretos se pasan con `--var` desde las variables protegidas del pipeline:
+En CI, los secretos se pasan con `--var` desde las variables protegidas del pipeline. El CLI se descarga del
+último release, sin instalar .NET:
 
 ```yaml
-# GitHub Actions
+# GitHub Actions (ubuntu-latest)
+- name: Instalar restpeach-cli
+  run: |
+    curl -sL https://github.com/rileydev23/restpeach/releases/latest/download/restpeach-cli-linux-x64.tar.gz | tar -xz
+    sudo mv restpeach-cli /usr/local/bin/
 - name: Probar la API
   run: restpeach-cli run . --env staging --var TOKEN=${{ secrets.API_TOKEN }} --bail
 ```
@@ -284,11 +316,12 @@ En CI, los secretos se pasan con `--var` desde las variables protegidas del pipe
 - **Sin red salvo tus peticiones.** RestPeach no tiene cuentas, telemetría, actualizaciones automáticas ni
   sincronización. La única conexión que hace es la petición que tú envías.
 - **Tus colecciones** están en tus repositorios. **La configuración de la app** (proyectos, grupos, pestañas,
-  tamaño de la ventana, idioma) está en `%APPDATA%\peachapps\RestPeach\state.json`.
+  tamaño de la ventana, idioma) está en `%APPDATA%\peachapps\RestPeach\state.json` (en Linux,
+  `~/.config/peachapps/RestPeach/state.json`). La ruta exacta aparece en **Acerca de** (F1).
 - **Cookies y valores capturados:** cada colección abierta tiene su propio frasco de cookies y sus valores
   `set` en memoria; nunca se escriben en disco. Se vacían desde el panel **Sesión** o al cerrar el proyecto.
-- **Modo portable:** crea un archivo `portable.txt` junto al `.exe` y la configuración se guardará en `.\data`
-  al lado, sin tocar `%APPDATA%`.
+- **Modo portable:** crea un archivo `portable.txt` junto al ejecutable y la configuración se guardará en
+  `.\data` al lado, sin tocar tu perfil.
 
 ## Límites conocidos
 
@@ -299,8 +332,9 @@ En CI, los secretos se pasan con `--var` desde las variables protegidas del pipe
 | Timeout por defecto | 30 s | Configurable en **Ajustes** de la colección o con `--timeout`. |
 
 Otros: no hay scripts de pre/post-petición (a propósito: las pruebas son declarativas), ni gRPC
-o GraphQL con esquema; el cambio de idioma requiere reiniciar; solo se publica para Windows x64 (Avalonia es
-multiplataforma, así que portarlo es posible).
+o GraphQL con esquema; el cambio de idioma requiere reiniciar; se publica para Windows x64 y Linux x64 (no para
+macOS ni ARM); en Linux se usa la barra de título del sistema y "Mostrar en el explorador de archivos" abre la
+carpeta, sin seleccionar el archivo.
 
 ## Compilar desde el código
 
@@ -313,17 +347,22 @@ dotnet test RestPeach.sln     :: ejecuta los tests
 build.cmd                     :: genera dist\RestPeach.exe y dist\restpeach-cli.exe
 ```
 
+En Linux, `./build.sh` genera `dist/RestPeach` y `dist/restpeach-cli` (linux-x64). Los dos aceptan una versión
+opcional (`build.cmd 0.4.0`) que queda grabada en los ejecutables.
+
 `build.cmd` publica la app con ReadyToRun y compresión, sin *trimming* (las gramáticas TextMate se cargan por
 reflexión), y el CLI con *trimming* para que sea pequeño. Requiere el SDK de .NET 10.
 
 **Depuración sin teclado:** en Debug, la variable `RESTPEACH_DEBUG_ACTIONS` ejecuta acciones al iniciar, por
-ejemplo `open:Shop/Posts/Get post.req.json;send;run;pick:0;detail:sent;env;about`. Útil para capturas.
+ejemplo `open:Shop/Posts/Get post.req.json;send;run;pick:0;detail:sent;env;about` (también `saved:N`, `wsrow:N`, `history`). Útil para capturas.
 
 ## Estructura del repositorio
 
 ```
 RestPeach/
-├── build.cmd · dev.cmd · RestPeach.sln
+├── build.cmd · build.sh · dev.cmd · RestPeach.sln
+├── CONTRIBUTING.md          cómo contribuir, ramas, releases y licencia de las contribuciones
+├── .github/                 CI, Release Drafter, release.yml y plantillas de issues y PR
 ├── docs/
 │   ├── ARQUITECTURA.md      capas, flujo de una petición, decisiones técnicas
 │   ├── FORMATO.md           formato de los archivos de la colección
@@ -339,10 +378,11 @@ RestPeach/
 
 ## Contribuir
 
-¡Las contribuciones son bienvenidas!
+¡Las contribuciones son bienvenidas! La guía completa está en [CONTRIBUTING.md](CONTRIBUTING.md).
 
 1. Abre un *issue* describiendo el problema o la propuesta (con capturas si es algo visual).
-2. Haz un *fork*, crea una rama y envía un *pull request* pequeño y enfocado.
+2. Haz un *fork*, crea una rama `feature/…`, `fix/…`, `docs/…`, `refactor/…` o `chore/…` y envía un
+   *pull request* pequeño y enfocado contra `main`.
 3. Antes de enviarlo: `dotnet build` sin errores y `dotnet test` en verde. La lógica nueva va en
    `RestPeach.Core` y lleva tests.
 
@@ -356,6 +396,34 @@ Convenciones:
 - Respeta [docs/DISENO.md](docs/DISENO.md) y el sistema de diseño de la familia.
 - **Nunca** cuentas, sincronización en la nube, telemetría, asistentes de IA integrados ni límites
   artificiales.
+
+## Versiones y releases
+
+RestPeach está en **0.x**: ya se puede usar a diario, pero todavía puede cambiar bastante. La **1.0.0** llegará
+cuando la app y el formato de los archivos estén estables.
+
+Las versiones siguen [SemVer](https://semver.org) (`MAYOR.MENOR.PARCHE`) y el repositorio usa *GitHub Flow*:
+una sola rama principal, `main`, sin ramas intermedias (`develop`, `release/…`).
+
+```
+feature/algo ──PR──┐
+fix/otro ─────PR───┼──▶ main ──(cuando el mantenedor decide)──▶ release v0.4.0 (Windows + Linux)
+docs/tal ─────PR───┘
+```
+
+1. **Cada cambio va en su rama** (`feature/…`, `fix/…`, `docs/…`, `refactor/…`, `chore/…`) y entra a `main`
+   con un *pull request* revisado y con la CI en verde. Nadie sube directo a `main`.
+2. **Cada merge actualiza un borrador del próximo release** con las notas agrupadas por tipo. La versión se
+   calcula sola a partir de las ramas: si entró algún `feature/` sube la menor (0.3.2 → 0.4.0); si no, el
+   parche (0.3.2 → 0.3.3).
+3. **Un merge no es un release.** Se pueden juntar varios *pull requests* en el borrador y publicarlo cuando
+   haya algo que valga la pena entregar. Publicarlo crea el tag `vX.Y.Z` y un workflow corre los tests,
+   compila la app y el CLI para Windows y Linux con esa versión, comprueba que arrancan y los adjunta al
+   release.
+4. Mientras sea 0.x, los cambios incompatibles también suben solo la versión menor. Para sacar la **1.0.0**,
+   el mantenedor cambia la versión del borrador a mano justo antes de publicarlo.
+
+`main` siempre debe compilar y pasar los tests: es la base de cada release.
 
 ## Licencia y créditos
 
