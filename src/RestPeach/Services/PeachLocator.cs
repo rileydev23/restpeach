@@ -20,7 +20,7 @@ public static class PeachLocator
     /// </summary>
     public static IEnumerable<string> Candidates(string app, string baseDir, string? localAppData, string? programFiles, string? pathVariable)
     {
-        var exe = app + ".exe";
+        var exe = OperatingSystem.IsWindows() ? app + ".exe" : app;
         yield return Path.Combine(baseDir, exe);
         var parent = Path.GetDirectoryName(baseDir.TrimEnd('\\', '/'));
         if (parent is not null) yield return Path.Combine(parent, app, exe);

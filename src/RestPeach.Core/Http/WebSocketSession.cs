@@ -192,14 +192,16 @@ public sealed class WebSocketSession : IAsyncDisposable
                 {
                     var code = _socket.CloseStatus is { } s ? ((int)s).ToString() : "1005";
                     var text = _socket.CloseStatusDescription is { Length: > 0 } d ? code + " " + d : code;
+                    // Reported first: answering can take a while, since the client then waits (up to 1 s) for the
+                    // server to drop the TCP connection, and a run stops listening after a quiet second.
+                    Finish(text);
                     // Answer the server's close so it can end the TCP connection cleanly.
                     if (_socket.State == WebSocketState.CloseReceived)
                     {
                         using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(3));
                         try { await _socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", wait.Token); }
-                        catch (Exception e) when (e is WebSocketException or OperationCanceledException) { }
+                        catch (Exception e) when (e is WebSocketException or OperationCanceledException or ObjectDisposedException) { }
                     }
-                    Finish(text);
                     return;
                 }
                 Received++;

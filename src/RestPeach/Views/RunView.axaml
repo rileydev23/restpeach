@@ -26,7 +26,7 @@
         <Button DockPanel.Dock="Right" Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyCliCommand}" Foreground="#8a8d93" FontSize="11" />
         <StackPanel Orientation="Horizontal" Spacing="8">
           <TextBlock Text="{l:L run.cli}" Classes="dim" FontSize="11" VerticalAlignment="Center" />
-          <SelectableTextBlock Text="{Binding CliHint}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11" Foreground="#c8c8c8" VerticalAlignment="Center" />
+          <SelectableTextBlock Text="{Binding CliHint}" FontFamily="Cascadia Mono, Consolas, Courier New, DejaVu Sans Mono, Liberation Mono" FontSize="11" Foreground="#c8c8c8" VerticalAlignment="Center" />
         </StackPanel>
       </DockPanel>
     </Border>
@@ -128,7 +128,7 @@
               <DataTemplate x:DataType="vm:HeaderRow">
                 <Grid ColumnDefinitions="220,*" Margin="10,3">
                   <TextBlock Text="{Binding Key}" Classes="mono" FontSize="12" Foreground="#a8c8e8" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
-                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New, DejaVu Sans Mono, Liberation Mono" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
@@ -137,7 +137,7 @@
           <!-- What was sent -->
           <Grid IsVisible="{Binding IsSentDetail}" RowDefinitions="Auto,Auto,*" Background="#1e1f22">
             <StackPanel Margin="10,8,10,4" Spacing="3">
-              <SelectableTextBlock Text="{Binding Selected.SentLine, FallbackValue=''}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+              <SelectableTextBlock Text="{Binding Selected.SentLine, FallbackValue=''}" FontFamily="Cascadia Mono, Consolas, Courier New, DejaVu Sans Mono, Liberation Mono" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
               <TextBlock Text="{Binding Selected.SentMissing, FallbackValue=''}" Foreground="#e0645a" FontSize="11" IsVisible="{Binding !!Selected.SentMissing.Length, FallbackValue=False}" />
               <TextBlock Text="{Binding Selected.Failure, FallbackValue=''}" Foreground="#e0645a" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding !Selected.WasSent, FallbackValue=False}" />
             </StackPanel>
@@ -147,7 +147,7 @@
                   <DataTemplate x:DataType="vm:HeaderRow">
                     <Grid ColumnDefinitions="220,*" Margin="10,3">
                       <TextBlock Text="{Binding Key}" Classes="mono" FontSize="12" Foreground="#a8c8e8" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
-                      <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+                      <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New, DejaVu Sans Mono, Liberation Mono" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
                     </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>

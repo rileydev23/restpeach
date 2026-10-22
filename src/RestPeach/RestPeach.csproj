@@ -10,7 +10,7 @@
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <AssemblyName>RestPeach</AssemblyName>
     <RootNamespace>RestPeach</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>0.1.0</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <TieredPGO>true</TieredPGO>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

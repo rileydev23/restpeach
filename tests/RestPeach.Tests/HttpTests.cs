@@ -100,7 +100,7 @@ public sealed class HttpTests : IDisposable
         var p = RequestPreparer.Prepare(req, AuthSpec.None(), scope, tmp.Path);
         Assert.Equal(Path.Combine(tmp.Path, "files", "data.csv"), p.RawBody);
         Assert.Equal("text/csv", p.Header("Content-Type"));
-        Assert.Contains("--data-binary '@" + p.RawBody, RestPeach.Core.Formats.Curl.Write(p));
+        Assert.Contains("--data-binary " + RestPeach.Core.Formats.Curl.Quote("@" + p.RawBody), RestPeach.Core.Formats.Curl.Write(p));
 
         using var engine = new HttpEngine();
         var res = await engine.SendAsync(p, new HttpOptions(), CancellationToken.None);

@@ -5,7 +5,7 @@
 <h1 align="center">RestPeach</h1>
 
 <p align="center">
-  API client for Windows, <b>local-first and git-native</b>.<br/>
+  API client for Windows and Linux, <b>local-first and git-native</b>.<br/>
   Requests live in your repository as text files: send them, test them, review them in the diff and run them in CI, with no accounts and no cloud.
 </p>
 
@@ -24,7 +24,8 @@
 - [Why RestPeach?](#why-restpeach)
 - [Screenshots](#screenshots)
 - [Features](#features)
-- [Requirements and installation](#requirements-and-installation)
+- [Requirements](#requirements)
+- [Installation](#installation)
 - [Getting started](#getting-started)
 - [How it works](#how-it-works)
   - [The collection is a folder](#the-collection-is-a-folder)
@@ -41,6 +42,7 @@
 - [Building from source](#building-from-source)
 - [Repository layout](#repository-layout)
 - [Contributing](#contributing)
+- [Versions and releases](#versions-and-releases)
 - [License and credits](#license-and-credits)
 
 ---
@@ -66,7 +68,7 @@ RestPeach turns that around:
 - **Easy to switch.** Imports Postman 2.1, Insomnia 4, OpenAPI 3.x and cURL commands.
 
 A new teammate clones the repository, opens the folder and already has every endpoint with its variables.
-No invitations, no accounts, no telemetry. A single portable `.exe`, in English and Spanish.
+No invitations, no accounts, no telemetry. A single portable executable, in English and Spanish.
 
 ## Screenshots
 
@@ -79,6 +81,11 @@ No invitations, no accounts, no telemetry. A single portable `.exe`, in English 
   <img src="docs/img/en/run.png" alt="Collection run with the detail of what was sent" /><br/>
   <sub><b>Run the collection:</b> results in order and, when you pick one, its tests, the response and what was actually sent.</sub>
 </p>
+
+| | |
+|---|---|
+| ![Connected WebSocket with saved messages and the log of what was sent and received](docs/img/en/websocket.png) | ![About RestPeach with the keyboard shortcuts and the language](docs/img/en/about.png) |
+| **WebSockets:** messages saved with the request and the log of what was sent ↑ and received ↓. | **About (F1):** keyboard shortcuts, language and where settings are stored. |
 
 ## Features
 
@@ -101,14 +108,32 @@ No invitations, no accounts, no telemetry. A single portable `.exe`, in English 
 | **Disk** | A watcher reloads the tree and environments when something changes outside (a `git pull`, another editor, an AI agent). |
 | **CLI** | `restpeach-cli run / import / export / envs / init` for CI and scripts. |
 
-## Requirements and installation
+## Requirements
 
-- Windows 10 or 11 (x64). Nothing else: the `.exe` is self-contained (no .NET install needed).
-- Download `RestPeach.exe` (and `restpeach-cli.exe` if you will use it in CI) and run it. There is no installer.
+- **To use it:** 64-bit Windows 10 or 11, or Linux x64 with a desktop (X11 or XWayland). No .NET installation
+  needed (the executables are self-contained). `restpeach-cli` needs no desktop.
+- **To see the branch and changes:** [Git for Windows](https://git-scm.com/download/win) on the `PATH` (or in
+  its usual install folder); on Linux, your distribution's `git`. Without git, RestPeach works the same, just
+  without that information.
+- **To build it:** the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+
+## Installation
+
+1. Download from the repository's *Releases* (or build it, see [Building from source](#building-from-source)):
+
+   | | App | CLI (for CI) |
+   |---|---|---|
+   | **Windows** | `RestPeach.exe` | `restpeach-cli.exe` |
+   | **Linux** | `RestPeach-linux-x64.tar.gz` | `restpeach-cli-linux-x64.tar.gz` |
+
+   On Linux, unpack it with `tar -xzf RestPeach-linux-x64.tar.gz`.
+2. Put it in any folder and run it. There is no installer.
+3. *(Optional)* **Portable mode:** create an empty `portable.txt` file next to the executable and the data
+   will be stored in `.\data\` instead of your profile.
 
 ## Getting started
 
-1. Open `RestPeach.exe` and click **Add project…** (or drop a folder on the window).
+1. Open RestPeach and click **Add project…** (or drop a folder on the window).
 2. If the project has no collection yet, RestPeach offers to create it: it writes `.api/config.json`, the
    `local` environment, the `.gitignore` for secrets and a `.gitattributes`.
 3. **New request** (Ctrl+N), type the URL and click **Send** (Ctrl+Enter). **Save** (Ctrl+S) writes it to
@@ -223,7 +248,8 @@ status bar; clicking the branch opens [GitPeach](https://github.com/rileydev23/g
 The **TextPeach** button opens the request (or the project) in
 [TextPeach](https://github.com/rileydev23/textpeach) to read it calmly.
 
-The three apps share the design, the project groups and the `%APPDATA%\peachapps\` folder, where each one
+The three apps share the design, the project groups and the `%APPDATA%\peachapps\` folder (on Linux,
+`~/.config/peachapps/`), where each one
 announces where it is installed (`location.json`). That is how they find each other with no installers or
 registry. Opening a folder from another app of the family opens it in the RestPeach window already running.
 
@@ -241,10 +267,15 @@ restpeach-cli init [path]
 folder). Exit code: **0** when everything passed, **1** when something failed, **2** for usage errors.
 Language: `RESTPEACH_LANG=en|es`. No colors: `--no-color` or `NO_COLOR`.
 
-In CI, pass secrets with `--var` from the pipeline's protected variables:
+In CI, pass secrets with `--var` from the pipeline's protected variables. The CLI is downloaded from the
+latest release, with no .NET install:
 
 ```yaml
-# GitHub Actions
+# GitHub Actions (ubuntu-latest)
+- name: Install restpeach-cli
+  run: |
+    curl -sL https://github.com/rileydev23/restpeach/releases/latest/download/restpeach-cli-linux-x64.tar.gz | tar -xz
+    sudo mv restpeach-cli /usr/local/bin/
 - name: Test the API
   run: restpeach-cli run . --env staging --var TOKEN=${{ secrets.API_TOKEN }} --bail
 ```
@@ -282,11 +313,12 @@ In CI, pass secrets with `--var` from the pipeline's protected variables:
 - **No network but your requests.** RestPeach has no accounts, telemetry, auto-updates or sync. The only
   connection it makes is the request you send.
 - **Your collections** are in your repositories. **The app's settings** (projects, groups, tabs, window size,
-  language) are in `%APPDATA%\peachapps\RestPeach\state.json`.
+  language) are in `%APPDATA%\peachapps\RestPeach\state.json` (on Linux,
+  `~/.config/peachapps/RestPeach/state.json`). **About** (F1) shows the exact path.
 - **Cookies and captured values:** each open collection keeps its own cookie jar and `set` values in memory;
   they are never written to disk. Clear them from the **Session** panel, or close the project.
-- **Portable mode:** create a `portable.txt` file next to the `.exe` and settings are stored in `.\data`
-  beside it, leaving `%APPDATA%` alone.
+- **Portable mode:** create a `portable.txt` file next to the executable and settings are stored in `.\data`
+  beside it, leaving your profile alone.
 
 ## Known limits
 
@@ -297,8 +329,9 @@ In CI, pass secrets with `--var` from the pipeline's protected variables:
 | Default timeout | 30 s | Configurable in the collection's **Settings** or with `--timeout`. |
 
 Also: no pre/post-request scripts (on purpose: tests are declarative), no gRPC or schema-aware
-GraphQL; changing the language needs a restart; only published for Windows x64 (Avalonia is cross-platform, so
-a port is possible).
+GraphQL; changing the language needs a restart; published for Windows x64 and Linux x64 (not macOS or ARM); on
+Linux the system title bar is used and "Show in the file explorer" opens the folder without selecting the
+file.
 
 ## Building from source
 
@@ -311,17 +344,22 @@ dotnet test RestPeach.sln     :: runs the tests
 build.cmd                     :: produces dist\RestPeach.exe and dist\restpeach-cli.exe
 ```
 
+On Linux, `./build.sh` produces `dist/RestPeach` and `dist/restpeach-cli` (linux-x64). Both take an optional
+version (`build.cmd 0.4.0`) that is stamped into the executables.
+
 `build.cmd` publishes the app with ReadyToRun and compression, without trimming (TextMate grammars are loaded
 through reflection), and the CLI trimmed so it stays small. Requires the .NET 10 SDK.
 
 **Keyboard-free debugging:** in Debug, the `RESTPEACH_DEBUG_ACTIONS` variable runs actions on startup, e.g.
-`open:Shop/Posts/Get post.req.json;send;run;pick:0;detail:sent;env;about`. Handy for screenshots.
+`open:Shop/Posts/Get post.req.json;send;run;pick:0;detail:sent;env;about` (also `saved:N`, `wsrow:N`, `history`). Handy for screenshots.
 
 ## Repository layout
 
 ```
 RestPeach/
-├── build.cmd · dev.cmd · RestPeach.sln
+├── build.cmd · build.sh · dev.cmd · RestPeach.sln
+├── CONTRIBUTING.md          how to contribute, branches, releases and the license of contributions
+├── .github/                 CI, Release Drafter, release.yml and issue and PR templates
 ├── docs/
 │   ├── ARQUITECTURA.md      layers, flow of a request, technical decisions
 │   ├── FORMATO.md           file format of the collection
@@ -337,10 +375,11 @@ RestPeach/
 
 ## Contributing
 
-Contributions are welcome!
+Contributions are welcome! The full guide is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 1. Open an *issue* describing the problem or the proposal (with screenshots if it is visual).
-2. *Fork*, create a branch and send a small, focused *pull request*.
+2. *Fork*, create a `feature/…`, `fix/…`, `docs/…`, `refactor/…` or `chore/…` branch and send a small,
+   focused *pull request* against `main`.
 3. Before sending it: `dotnet build` with no errors and `dotnet test` green. New logic goes in
    `RestPeach.Core` and comes with tests.
 
@@ -352,6 +391,34 @@ Conventions:
   must not produce a diff. Unknown fields are kept.
 - Follow [docs/DISENO.md](docs/DISENO.md) and the family design system.
 - **Never** accounts, cloud sync, telemetry, built-in AI assistants or artificial limits.
+
+## Versions and releases
+
+RestPeach is at **0.x**: it is usable every day, but it can still change quite a bit. **1.0.0** will come once
+the app and the file format are stable.
+
+Versions follow [SemVer](https://semver.org) (`MAJOR.MINOR.PATCH`) and the repository uses *GitHub Flow*: a
+single main branch, `main`, with no intermediate branches (`develop`, `release/…`).
+
+```
+feature/thing ──PR──┐
+fix/other ─────PR───┼──▶ main ──(when the maintainer decides)──▶ release v0.4.0 (Windows + Linux)
+docs/stuff ────PR───┘
+```
+
+1. **Every change lives in its own branch** (`feature/…`, `fix/…`, `docs/…`, `refactor/…`, `chore/…`) and
+   reaches `main` through a reviewed *pull request* with green CI. Nobody pushes straight to `main`.
+2. **Every merge updates a draft of the next release** with the notes grouped by kind. The version is worked
+   out from the branches: any `feature/` raises the minor version (0.3.2 → 0.4.0), otherwise the patch
+   (0.3.2 → 0.3.3).
+3. **A merge is not a release.** Several pull requests can pile up in the draft, and it is published when
+   there is something worth shipping. Publishing it creates the `vX.Y.Z` tag, and a workflow runs the tests,
+   builds the app and the CLI for Windows and Linux with that version, checks that they start, and attaches
+   them to the release.
+4. While on 0.x, breaking changes also raise only the minor version. For **1.0.0**, the maintainer changes the
+   draft's version by hand right before publishing it.
+
+`main` must always build and pass the tests: every release is cut from it.
 
 ## License and credits
 

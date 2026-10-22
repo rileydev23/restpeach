@@ -48,7 +48,7 @@
     <!-- The URL as it will be sent -->
     <Border DockPanel.Dock="Top" Background="#1e1f22" Padding="12,3">
       <StackPanel Orientation="Horizontal" Spacing="10" ClipToBounds="True">
-        <SelectableTextBlock Text="{Binding ResolvedUrl}" Foreground="#8a8d93" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11"
+        <SelectableTextBlock Text="{Binding ResolvedUrl}" Foreground="#8a8d93" FontFamily="Cascadia Mono, Consolas, Courier New, DejaVu Sans Mono, Liberation Mono" FontSize="11"
                              SelectionBrush="#33507a" ToolTip.Tip="{l:L rv.resolved.tip}" />
         <TextBlock Text="{Binding MissingText}" Foreground="#e0645a" FontSize="11" VerticalAlignment="Center" />
       </StackPanel>
@@ -307,7 +307,7 @@
                 <DataTemplate x:DataType="vm:HeaderRow">
                   <Grid ColumnDefinitions="220,*" Margin="10,3">
                     <TextBlock Text="{Binding Key}" Classes="mono" FontSize="12" Foreground="#a8c8e8" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Key}" />
-                    <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+                    <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New, DejaVu Sans Mono, Liberation Mono" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
                   </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>
@@ -320,7 +320,7 @@
                     <Grid ColumnDefinitions="180,*" Margin="10,3">
                       <TextBlock Text="{Binding Name}" Classes="mono" FontSize="12" Foreground="#a8c8e8" TextTrimming="CharacterEllipsis" />
                       <StackPanel Grid.Column="1">
-                        <SelectableTextBlock Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
+                        <SelectableTextBlock Text="{Binding Value}" FontFamily="Cascadia Mono, Consolas, Courier New, DejaVu Sans Mono, Liberation Mono" FontSize="12" TextWrapping="Wrap" SelectionBrush="#33507a" />
                         <TextBlock Text="{Binding Attributes}" Classes="dim" FontSize="11" TextWrapping="Wrap" />
                       </StackPanel>
                     </Grid>
