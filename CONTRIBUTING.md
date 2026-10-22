@@ -76,8 +76,8 @@ Versions follow [SemVer](https://semver.org) and nobody edits a version number b
 - RestPeach is still at **0.x**, so breaking changes raise the minor version too. The maintainer sets
   **1.0.0** by hand on the draft when the time comes; after that, the `breaking` label raises the major one.
 - A merge is not a release: the draft collects several pull requests and is published when it is worth it.
-- When the maintainer publishes the draft, the tag `vX.Y.Z` is created and a workflow builds `RestPeach.exe`,
-  `restpeach-cli.exe` and their Linux versions (`.tar.gz`) with that version and attaches them to the release.
+- When the maintainer publishes the draft, the tag `vX.Y.Z` is created and a workflow builds `restpeach-windows-x64-portable.exe`,
+  `restpeach-windows-x64-setup.exe`, `restpeach-cli-windows-x64.exe` and their Linux versions (`.tar.gz`) with that version and attaches them to the release.
 
 ### License of contributions
 
@@ -171,8 +171,8 @@ Las versiones siguen [SemVer](https://semver.org) y nadie cambia el número de v
   mantenedor pone la **1.0.0** a mano en el borrador cuando llegue el momento; desde ahí, la etiqueta
   `breaking` sube la versión mayor.
 - Un merge no es un release: el borrador junta varios *pull requests* y se publica cuando vale la pena.
-- Cuando el mantenedor publica el borrador, se crea el tag `vX.Y.Z` y un workflow compila `RestPeach.exe`,
-  `restpeach-cli.exe` y sus versiones para Linux (`.tar.gz`) con esa versión y los adjunta al release.
+- Cuando el mantenedor publica el borrador, se crea el tag `vX.Y.Z` y un workflow compila `restpeach-windows-x64-portable.exe`,
+  `restpeach-windows-x64-setup.exe`, `restpeach-cli-windows-x64.exe` y sus versiones para Linux (`.tar.gz`) con esa versión y los adjunta al release.
 
 ### Licencia de las contribuciones
 

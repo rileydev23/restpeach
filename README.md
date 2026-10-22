@@ -125,13 +125,13 @@ en inglés.
 
    | | App | CLI (para CI) |
    |---|---|---|
-   | **Windows** | `RestPeach.exe` | `restpeach-cli.exe` |
-   | **Linux** | `RestPeach-linux-x64.tar.gz` | `restpeach-cli-linux-x64.tar.gz` |
+   | **Windows** | `restpeach-windows-x64-portable.exe` | `restpeach-cli-windows-x64.exe` |
+   | **Linux** | `restpeach-linux-x64.tar.gz` | `restpeach-cli-linux-x64.tar.gz` |
 
-   En Linux, descomprímelo con `tar -xzf RestPeach-linux-x64.tar.gz`.
+   En Linux, descomprímelo con `tar -xzf restpeach-linux-x64.tar.gz`.
 2. Para la app tienes dos formas:
-   - **Portable:** pon `RestPeach.exe` (o `RestPeach` en Linux) en la carpeta que quieras y ejecútalo.
-   - **Instalada:** en Windows, `RestPeach-Setup.exe` (también en *Releases*) la instala solo para tu usuario,
+   - **Portable:** pon `restpeach-windows-x64-portable.exe` (o `RestPeach` del `.tar.gz` en Linux) en la carpeta que quieras y ejecútalo.
+   - **Instalada:** en Windows, `restpeach-windows-x64-setup.exe` (también en *Releases*) la instala solo para tu usuario,
      sin pedir administrador, en `%LOCALAPPDATA%\Programs\RestPeach`; aparece al buscar en el menú Inicio y se
      desinstala desde **Configuración > Aplicaciones**. En Linux, `./install.sh` (dentro del `.tar.gz`) la instala
      sin root en `~/.local/opt/restpeach`, con el comando `restpeach` y una entrada en el menú de aplicaciones;

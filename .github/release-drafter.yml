@@ -48,8 +48,8 @@ template: |
   $CHANGES
 
   **Download / Descarga**
-  - Windows, installer / instalador: `RestPeach-Setup.exe` (Start menu and Settings > Apps, no admin / menú Inicio y Configuración > Aplicaciones, sin administrador)
-  - Windows, portable: `RestPeach.exe` (app) · `restpeach-cli.exe` (CI)
-  - Linux: `RestPeach-linux-x64.tar.gz`: portable `./RestPeach`, or install / o instalar `./install.sh` (app menu / menú de aplicaciones) · `restpeach-cli-linux-x64.tar.gz` (CI)
+  - Windows, installer / instalador: `restpeach-windows-x64-setup.exe` (Start menu and Settings > Apps, no admin / menú Inicio y Configuración > Aplicaciones, sin administrador)
+  - Windows, portable: `restpeach-windows-x64-portable.exe` (app) · `restpeach-cli-windows-x64.exe` (CI)
+  - Linux: `restpeach-linux-x64.tar.gz`: portable `./RestPeach`, or install / o instalar `./install.sh` (app menu / menú de aplicaciones) · `restpeach-cli-linux-x64.tar.gz` (CI)
 
   **Full changelog:** https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION

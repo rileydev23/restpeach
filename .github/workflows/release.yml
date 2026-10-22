@@ -1,6 +1,6 @@
 # Publishing a release (from the draft kept by release-drafter.yml) builds RestPeach and restpeach-cli for Windows
 # and Linux with the release's version, checks that each build starts, builds the app's installers
-# (RestPeach-Setup.exe and the install.sh in the Linux archive), checks that they install and uninstall, and
+# (restpeach-windows-x64-setup.exe and the install.sh in the Linux archive), checks that they install and uninstall, and
 # attaches everything to the release.
 name: Release
 
@@ -53,7 +53,7 @@ jobs:
         shell: pwsh
         run: |
           # Not Start-Process -Wait: it also waits for child processes, and the silent install leaves RestPeach running.
-          $setup = Start-Process dist\RestPeach-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
+          $setup = Start-Process dist\restpeach-windows-x64-setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru
           if (-not $setup.WaitForExit(300000)) { throw "The installer did not finish in 5 minutes" }
           if ($setup.ExitCode -ne 0) { throw "The installer exited with code $($setup.ExitCode)" }
           $app = "$env:LOCALAPPDATA\Programs\RestPeach"
@@ -74,7 +74,11 @@ jobs:
       - name: Attach them to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/RestPeach.exe dist/RestPeach-Setup.exe dist/restpeach-cli.exe --clobber
+        # Descriptive names for the release; the exe itself (and the installed one) stays RestPeach.exe.
+        run: |
+          Copy-Item dist/RestPeach.exe dist/restpeach-windows-x64-portable.exe
+          Copy-Item dist/restpeach-cli.exe dist/restpeach-cli-windows-x64.exe
+          gh release upload "${{ github.event.release.tag_name }}" dist/restpeach-windows-x64-portable.exe dist/restpeach-windows-x64-setup.exe dist/restpeach-cli-windows-x64.exe --clobber
 
   linux:
     runs-on: ubuntu-latest
@@ -110,11 +114,11 @@ jobs:
           cp installer/linux/install.sh installer/linux/uninstall.sh installer/installed.txt dist/
           cp src/RestPeach/Assets/logo.png dist/restpeach.png
           chmod +x dist/install.sh dist/uninstall.sh
-          tar -czf RestPeach-linux-x64.tar.gz -C dist RestPeach install.sh uninstall.sh installed.txt restpeach.png
+          tar -czf restpeach-linux-x64.tar.gz -C dist RestPeach install.sh uninstall.sh installed.txt restpeach.png
           tar -czf restpeach-cli-linux-x64.tar.gz -C dist restpeach-cli
       - name: Check that install.sh and uninstall.sh work
         run: |
-          mkdir -p /tmp/rp && tar -xzf RestPeach-linux-x64.tar.gz -C /tmp/rp
+          mkdir -p /tmp/rp && tar -xzf restpeach-linux-x64.tar.gz -C /tmp/rp
           /tmp/rp/install.sh
           test -x ~/.local/opt/restpeach/RestPeach
           test -f ~/.local/opt/restpeach/installed.txt
@@ -128,4 +132,4 @@ jobs:
       - name: Attach them to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" RestPeach-linux-x64.tar.gz restpeach-cli-linux-x64.tar.gz --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" restpeach-linux-x64.tar.gz restpeach-cli-linux-x64.tar.gz --clobber

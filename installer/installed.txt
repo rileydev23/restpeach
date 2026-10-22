@@ -1,2 +1,2 @@
-RestPeach was installed with its installer (RestPeach-Setup.exe on Windows, install.sh on Linux).
+RestPeach was installed with its installer (restpeach-windows-x64-setup.exe on Windows, install.sh on Linux).
 Updates from inside the app keep this installation up to date. Do not delete this file.

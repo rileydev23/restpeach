@@ -124,13 +124,13 @@ Spanish.
 
    | | App | CLI (for CI) |
    |---|---|---|
-   | **Windows** | `RestPeach.exe` | `restpeach-cli.exe` |
-   | **Linux** | `RestPeach-linux-x64.tar.gz` | `restpeach-cli-linux-x64.tar.gz` |
+   | **Windows** | `restpeach-windows-x64-portable.exe` | `restpeach-cli-windows-x64.exe` |
+   | **Linux** | `restpeach-linux-x64.tar.gz` | `restpeach-cli-linux-x64.tar.gz` |
 
-   On Linux, unpack it with `tar -xzf RestPeach-linux-x64.tar.gz`.
+   On Linux, unpack it with `tar -xzf restpeach-linux-x64.tar.gz`.
 2. For the app there are two ways:
-   - **Portable:** put `RestPeach.exe` (or `RestPeach` on Linux) in any folder and run it.
-   - **Installed:** on Windows, `RestPeach-Setup.exe` (also in *Releases*) installs it for your user only, with
+   - **Portable:** put `restpeach-windows-x64-portable.exe` (or `RestPeach` from the `.tar.gz` on Linux) in any folder and run it.
+   - **Installed:** on Windows, `restpeach-windows-x64-setup.exe` (also in *Releases*) installs it for your user only, with
      no administrator, into `%LOCALAPPDATA%\Programs\RestPeach`; it shows up in Start menu search and is
      uninstalled from **Settings > Apps**. On Linux, `./install.sh` (inside the `.tar.gz`) installs it without
      root into `~/.local/opt/restpeach`, with a `restpeach` command and an entry in the app menu; remove it with
