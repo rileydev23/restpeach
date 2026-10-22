@@ -68,7 +68,8 @@ RestPeach invierte eso:
 - **Sin fricción para llegar.** Importa Postman 2.1, Insomnia 4, OpenAPI 3.x y comandos cURL.
 
 Un nuevo integrante clona el repositorio, abre la carpeta y ya tiene todos los endpoints con sus variables.
-Sin invitaciones, sin cuentas, sin telemetría. Es un único ejecutable portable, en español y en inglés.
+Sin invitaciones, sin cuentas, sin telemetría. Es un único ejecutable portable (o con instalador), en español y
+en inglés.
 
 ## Capturas
 
@@ -128,9 +129,24 @@ Sin invitaciones, sin cuentas, sin telemetría. Es un único ejecutable portable
    | **Linux** | `RestPeach-linux-x64.tar.gz` | `restpeach-cli-linux-x64.tar.gz` |
 
    En Linux, descomprímelo con `tar -xzf RestPeach-linux-x64.tar.gz`.
-2. Ponlo en la carpeta que quieras y ejecútalo. No hay instalador.
+2. Para la app tienes dos formas:
+   - **Portable:** pon `RestPeach.exe` (o `RestPeach` en Linux) en la carpeta que quieras y ejecútalo.
+   - **Instalada:** en Windows, `RestPeach-Setup.exe` (también en *Releases*) la instala solo para tu usuario,
+     sin pedir administrador, en `%LOCALAPPDATA%\Programs\RestPeach`; aparece al buscar en el menú Inicio y se
+     desinstala desde **Configuración > Aplicaciones**. En Linux, `./install.sh` (dentro del `.tar.gz`) la instala
+     sin root en `~/.local/opt/restpeach`, con el comando `restpeach` y una entrada en el menú de aplicaciones;
+     se quita con `~/.local/opt/restpeach/uninstall.sh`. Desinstalar nunca borra tus datos.
 3. *(Opcional)* **Modo portable:** crea un archivo vacío `portable.txt` junto al ejecutable y los datos se
    guardarán en `.\data\` en lugar de en tu perfil.
+
+### Actualizaciones
+
+Una vez al día, al abrirse, RestPeach mira en GitHub si hay una versión nueva. Si la hay, aparece un botón
+**↑ 1.2.0** junto al **?**; nada más cambia. Al pulsarlo ves las novedades y eliges **Actualizar y reiniciar**,
+**Ahora no** u **Omitir esta versión**. Al actualizar, la descarga se verifica con su SHA-256, RestPeach se
+reinicia y vuelve a abrir tus pestañas. Si la instalaste con el instalador, se actualiza ejecutando el nuevo
+instalador en silencio. En **Acerca de** (F1) puedes desactivar la búsqueda automática o buscar en el momento.
+`restpeach-cli` no se actualiza solo: en CI fija la versión que descargas.
 
 ## Primeros pasos
 
@@ -313,8 +329,9 @@ En CI, los secretos se pasan con `--var` desde las variables protegidas del pipe
 
 ## Datos, privacidad y modo portable
 
-- **Sin red salvo tus peticiones.** RestPeach no tiene cuentas, telemetría, actualizaciones automáticas ni
-  sincronización. La única conexión que hace es la petición que tú envías.
+- **Sin red salvo tus peticiones.** RestPeach no tiene cuentas, telemetría ni sincronización. Aparte de las
+  peticiones que tú envías, solo pregunta a la API pública de GitHub por el último release de RestPeach, como
+  mucho una vez al día (desactivable en **Acerca de**), y lo descarga solo si tú lo pides. No envía nada tuyo.
 - **Tus colecciones** están en tus repositorios. **La configuración de la app** (proyectos, grupos, pestañas,
   tamaño de la ventana, idioma) está en `%APPDATA%\peachapps\RestPeach\state.json` (en Linux,
   `~/.config/peachapps/RestPeach/state.json`). La ruta exacta aparece en **Acerca de** (F1).
