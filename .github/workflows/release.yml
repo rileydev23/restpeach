@@ -1,0 +1,81 @@
+# Publishing a release (from the draft kept by release-drafter.yml) builds RestPeach and restpeach-cli for Windows
+# and Linux with the release's version, checks that each build starts, and attaches them to the release.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write  # upload the builds to the release
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test
+        run: dotnet test -c Release
+      - name: Build the portable exes
+        shell: cmd
+        # v1.2.3 -> 1.2.3, stamped into both exes (About and --version show it).
+        run: |
+          set TAG=${{ github.event.release.tag_name }}
+          call build.cmd %TAG:v=%
+      - name: Check that they start
+        shell: pwsh
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $v = & dist/restpeach-cli.exe --version
+          if ($v -ne "restpeach-cli $($env:TAG.TrimStart('v'))") { throw "restpeach-cli --version says '$v'" }
+          $p = Start-Process dist/RestPeach.exe -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { throw "RestPeach.exe exited at startup with code $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+      - name: Attach them to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/RestPeach.exe dist/restpeach-cli.exe --clobber
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test
+        run: dotnet test -c Release
+      - name: Build the portable binaries
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: ./build.sh "${TAG#v}"
+      - name: Check that they start
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          v=$(dist/restpeach-cli --version)
+          if [ "$v" != "restpeach-cli ${TAG#v}" ]; then echo "::error::restpeach-cli --version says '$v'"; exit 1; fi
+          sudo apt-get update -q
+          sudo apt-get install -yq xvfb libice6 libsm6 libfontconfig1 libx11-6 libxext6 libxi6 libxrandr2 libxcursor1
+          # Still running after 15 s means it started; timeout then stops it with code 124.
+          set +e
+          xvfb-run -a timeout 15 dist/RestPeach
+          code=$?
+          if [ $code -ne 124 ]; then echo "::error::RestPeach exited at startup with code $code"; exit 1; fi
+      - name: Package them
+        run: |
+          tar -czf RestPeach-linux-x64.tar.gz -C dist RestPeach
+          tar -czf restpeach-cli-linux-x64.tar.gz -C dist restpeach-cli
+      - name: Attach them to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" RestPeach-linux-x64.tar.gz restpeach-cli-linux-x64.tar.gz --clobber
