@@ -119,7 +119,7 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                   <TextBlock Text="{l:L ws.messageType}" Classes="dim" VerticalAlignment="Center" />
-                  <ComboBox ItemsSource="{Binding MessageTypes}" SelectedItem="{Binding BodyType}" MinWidth="110" />
+                  <ComboBox ItemsSource="{Binding MessageTypes}" SelectedItem="{Binding MessageType}" MinWidth="110" />
                 </StackPanel>
               </DockPanel>
             </Border>
