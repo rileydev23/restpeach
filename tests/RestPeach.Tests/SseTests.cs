@@ -97,7 +97,8 @@ public sealed class SseTests : IDisposable
         public ApiResponse? Head;
         public readonly SseParser Parser = new();
         public readonly List<(SseEvent Event, DateTime At)> Events = new();
-        public void Started(ApiResponse head) => Head = head;
+        public Action? OnStarted;
+        public void Started(ApiResponse head) { Head = head; OnStarted?.Invoke(); }
         public void Data(byte[] chunk) { lock (Events) foreach (var e in Parser.Feed(chunk)) Events.Add((e, DateTime.UtcNow)); }
     }
 
@@ -124,14 +125,15 @@ public sealed class SseTests : IDisposable
     {
         using var engine = new HttpEngine();
         var p = RequestPreparer.Prepare(new ApiRequest { Url = _base + "forever" }, AuthSpec.None(), new VariableScope());
-        var res = await engine.SendAsync(p, new HttpOptions(TimeoutMs: 600), CancellationToken.None, new Recorder());
+        // The timeout also bounds the wait for the headers: roomy enough for a slow CI machine.
+        var res = await engine.SendAsync(p, new HttpOptions(TimeoutMs: 1500), CancellationToken.None, new Recorder());
         Assert.Null(res.Error);
         Assert.Equal("idle", res.Interrupted);
         Assert.Contains("\"n\": 0", res.Text);
 
-        // A user's cancel keeps it too.
-        using var cts = new CancellationTokenSource(300);
-        var stopped = await engine.SendAsync(p, new HttpOptions(TimeoutMs: 5000), cts.Token, new Recorder());
+        // A user's cancel once the stream is live keeps it too (a cancel before the headers throws, by design).
+        using var cts = new CancellationTokenSource();
+        var stopped = await engine.SendAsync(p, new HttpOptions(TimeoutMs: 5000), cts.Token, new Recorder { OnStarted = () => cts.CancelAfter(200) });
         Assert.Equal("cancelled", stopped.Interrupted);
     }
 }
