@@ -89,6 +89,30 @@ public sealed class HttpTests : IDisposable
     }
 
     [Fact]
+    public async Task Binary_body_sends_the_file_relative_to_the_collection()
+    {
+        using var tmp = new TempDir();
+        Directory.CreateDirectory(Path.Combine(tmp.Path, "files"));
+        File.WriteAllText(Path.Combine(tmp.Path, "files", "data.csv"), "a,b;1,2");
+        var req = new ApiRequest { Method = "POST", Url = _base + "echo", Body = new BodySpec { Type = BodyTypes.Binary, Data = "{{DIR}}/data.csv" } };
+        var scope = new VariableScope();
+        scope.Set("DIR", "files", VariableSource.Collection);
+        var p = RequestPreparer.Prepare(req, AuthSpec.None(), scope, tmp.Path);
+        Assert.Equal(Path.Combine(tmp.Path, "files", "data.csv"), p.RawBody);
+        Assert.Equal("text/csv", p.Header("Content-Type"));
+        Assert.Contains("--data-binary '@" + p.RawBody, RestPeach.Core.Formats.Curl.Write(p));
+
+        using var engine = new HttpEngine();
+        var res = await engine.SendAsync(p, new HttpOptions(), CancellationToken.None);
+        Assert.Null(res.Error);
+        Assert.Contains("\"body\":\"a,b;1,2\"", res.Text);
+        Assert.Contains("\"ct\":\"text/csv\"", res.Text);
+
+        var gone = RequestPreparer.Prepare(req, AuthSpec.None(), new VariableScope(), tmp.Path);
+        Assert.NotNull((await engine.SendAsync(gone, new HttpOptions(), CancellationToken.None)).Error);
+    }
+
+    [Fact]
     public async Task Connection_errors_are_reported_not_thrown()
     {
         using var engine = new HttpEngine();

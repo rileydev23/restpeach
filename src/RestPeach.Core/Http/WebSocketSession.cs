@@ -91,6 +91,11 @@ public sealed class WebSocketSession : IAsyncDisposable
                 else if (!Managed.Contains(k)) socket.Options.SetRequestHeader(k, v);
             }
             if (!p.HasHeader("User-Agent")) socket.Options.SetRequestHeader("User-Agent", HttpEngine.UserAgent);
+            if (p.Deferred is { Type: Model.AuthTypes.OAuth2 } oauth)
+            {
+                var token = await engine.OAuthTokenAsync(oauth, options, false, ct);
+                socket.Options.SetRequestHeader("Authorization", "Bearer " + token.AccessToken);
+            }
 
             await socket.ConnectAsync(uri, engine.WebSocketInvoker(options), timeout.Token);
             var handshake = new WsHandshake

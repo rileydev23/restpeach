@@ -124,6 +124,20 @@ public static partial class Exporter
             AuthTypes.Bearer => new JsonObject { ["type"] = "bearer", ["bearer"] = P(("token", a.Token)) },
             AuthTypes.Basic => new JsonObject { ["type"] = "basic", ["basic"] = P(("username", a.Username), ("password", a.Password)) },
             AuthTypes.ApiKey => new JsonObject { ["type"] = "apikey", ["apikey"] = P(("key", a.Key), ("value", a.Value), ("in", a.In)) },
+            AuthTypes.Digest => new JsonObject { ["type"] = "digest", ["digest"] = P(("username", a.Username), ("password", a.Password)) },
+            AuthTypes.AwsSigV4 => new JsonObject
+            {
+                ["type"] = "awsv4",
+                ["awsv4"] = P(("accessKey", a.AccessKey), ("secretKey", a.SecretKey), ("region", a.Region), ("service", a.Service), ("sessionToken", a.SessionToken)),
+            },
+            AuthTypes.OAuth2 => new JsonObject
+            {
+                ["type"] = "oauth2",
+                ["oauth2"] = P(("grant_type", a.Grant == OAuthGrants.AuthorizationCode ? "authorization_code_with_pkce" : a.Grant),
+                    ("accessTokenUrl", a.TokenUrl), ("authUrl", a.AuthUrl), ("clientId", a.ClientId), ("clientSecret", a.ClientSecret),
+                    ("scope", a.Scope), ("username", a.Username), ("password", a.Password), ("redirect_uri", a.RedirectUri),
+                    ("client_authentication", a.ClientAuth == "body" ? "body" : "header")),
+            },
             _ => new JsonObject { ["type"] = "noauth" },
         };
     }
@@ -144,6 +158,7 @@ public static partial class Exporter
             BodyTypes.None => null,
             BodyTypes.FormData => new JsonObject { ["mode"] = "formdata", ["formdata"] = Rows(true) },
             BodyTypes.UrlEncoded => new JsonObject { ["mode"] = "urlencoded", ["urlencoded"] = Rows(false) },
+            BodyTypes.Binary => new JsonObject { ["mode"] = "file", ["file"] = new JsonObject { ["src"] = b.Data } },
             BodyTypes.GraphQL => new JsonObject
             {
                 ["mode"] = "graphql",
@@ -338,6 +353,7 @@ public static partial class Exporter
                 return Content("application/json", new JsonObject { ["example"] = operation });
             case BodyTypes.FormData: return Content("multipart/form-data", new JsonObject { ["schema"] = FormSchema() });
             case BodyTypes.UrlEncoded: return Content("application/x-www-form-urlencoded", new JsonObject { ["schema"] = FormSchema() });
+            case BodyTypes.Binary: return Content(b.Data.Length > 0 ? HttpEngine.MimeFor(b.Data) : "application/octet-stream", new JsonObject { ["schema"] = new JsonObject { ["type"] = "string", ["format"] = "binary" } });
             default: return Content(BodyTypes.DefaultContentType(b.Type) ?? "text/plain", new JsonObject { ["example"] = b.Data });
         }
     }

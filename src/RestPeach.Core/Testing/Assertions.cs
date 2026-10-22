@@ -62,7 +62,9 @@ public static class Assertions
             if (!jsonTried)
             {
                 jsonTried = true;
-                try { json = JsonDocument.Parse(r.Text, CanonicalJson.ReadOptions); } catch (JsonException) { }
+                // An event stream is tested as the array of its events: $[0].data.id, $.length.
+                var text = Http.SseParser.IsEventStream(r.ContentType) ? Http.SseParser.ToJson(Http.SseParser.Parse(r.Text)) : r.Text;
+                try { json = JsonDocument.Parse(text, CanonicalJson.ReadOptions); } catch (JsonException) { }
             }
             return json?.RootElement;
         }

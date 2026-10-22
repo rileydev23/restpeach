@@ -118,6 +118,19 @@ public static class Codec
             Key = o.Str("key"),
             Value = o.Str("value"),
             In = o.Str("in", "header").Equals("query", StringComparison.OrdinalIgnoreCase) ? "query" : "header",
+            AccessKey = o.Str("accessKey"),
+            SecretKey = o.Str("secretKey"),
+            Region = o.Str("region"),
+            Service = o.Str("service"),
+            SessionToken = o.Str("sessionToken"),
+            Grant = OAuthGrants.All.Contains(o.Str("grant")) ? o.Str("grant") : OAuthGrants.ClientCredentials,
+            TokenUrl = o.Str("tokenUrl"),
+            AuthUrl = o.Str("authUrl"),
+            ClientId = o.Str("clientId"),
+            ClientSecret = o.Str("clientSecret"),
+            Scope = o.Str("scope"),
+            RedirectUri = o.Str("redirectUri"),
+            ClientAuth = o.Str("clientAuth") == "body" ? "body" : "basic",
         };
     }
 
@@ -138,6 +151,32 @@ public static class Codec
                 o["key"] = a.Key;
                 o["value"] = a.Value;
                 o["in"] = a.In;
+                break;
+            case AuthTypes.Digest:
+                o["username"] = a.Username;
+                o["password"] = a.Password;
+                break;
+            case AuthTypes.AwsSigV4:
+                o["accessKey"] = a.AccessKey;
+                o["secretKey"] = a.SecretKey;
+                o["region"] = a.Region;
+                o["service"] = a.Service;
+                if (a.SessionToken.Length > 0) o["sessionToken"] = a.SessionToken;
+                break;
+            case AuthTypes.OAuth2:
+                o["grant"] = a.Grant;
+                o["tokenUrl"] = a.TokenUrl;
+                if (a.Grant == OAuthGrants.AuthorizationCode) o["authUrl"] = a.AuthUrl;
+                o["clientId"] = a.ClientId;
+                if (a.ClientSecret.Length > 0) o["clientSecret"] = a.ClientSecret;
+                if (a.Scope.Length > 0) o["scope"] = a.Scope;
+                if (a.Grant == OAuthGrants.Password)
+                {
+                    o["username"] = a.Username;
+                    o["password"] = a.Password;
+                }
+                if (a.Grant == OAuthGrants.AuthorizationCode && a.RedirectUri.Length > 0) o["redirectUri"] = a.RedirectUri;
+                if (a.ClientAuth == "body") o["clientAuth"] = "body";
                 break;
         }
         return o;
@@ -195,7 +234,7 @@ public static class Codec
     // ------------------------------------------------------------ settings
 
     private static readonly HashSet<string> ConfigKeys = new(StringComparer.Ordinal)
-        { "name", "defaultEnvironment", "auth", "variables", "timeoutMs", "followRedirects", "verifyTls", "order" };
+        { "name", "defaultEnvironment", "auth", "variables", "timeoutMs", "followRedirects", "verifyTls", "httpVersion", "proxy", "clientCertificate", "order" };
 
     public static WorkspaceConfig ReadConfig(JsonNode? node)
     {
@@ -211,6 +250,11 @@ public static class Codec
             TimeoutMs = Math.Clamp(o.Int("timeoutMs", 30000), 100, 3_600_000),
             FollowRedirects = o.Bool("followRedirects", true),
             VerifyTls = o.Bool("verifyTls", true),
+            HttpVersion = o.Str("httpVersion").Trim() is "1.1" or "2" or "3" ? o.Str("httpVersion").Trim() : "",
+            Proxy = o.Str("proxy").Trim(),
+            ClientCert = o.Obj("clientCertificate") is { } cc
+                ? new ClientCertSpec { Path = cc.Str("path"), Key = cc.Str("key"), Password = cc.Str("password"), Host = cc.Str("host") }
+                : new ClientCertSpec(),
             Order = ReadNames(o.Arr("order")),
             Extra = Leftovers(o, ConfigKeys),
         };
@@ -226,6 +270,16 @@ public static class Codec
         o["timeoutMs"] = c.TimeoutMs;
         o["followRedirects"] = c.FollowRedirects;
         o["verifyTls"] = c.VerifyTls;
+        if (c.HttpVersion.Length > 0) o["httpVersion"] = c.HttpVersion;
+        if (c.Proxy.Length > 0) o["proxy"] = c.Proxy;
+        if (!c.ClientCert.IsEmpty)
+        {
+            var cc = new JsonObject { ["path"] = c.ClientCert.Path };
+            if (c.ClientCert.Key.Length > 0) cc["key"] = c.ClientCert.Key;
+            if (c.ClientCert.Password.Length > 0) cc["password"] = c.ClientCert.Password;
+            if (c.ClientCert.Host.Length > 0) cc["host"] = c.ClientCert.Host;
+            o["clientCertificate"] = cc;
+        }
         if (c.Order.Count > 0) o["order"] = WriteNames(c.Order);
         return o;
     }

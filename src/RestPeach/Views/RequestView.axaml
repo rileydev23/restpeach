@@ -157,7 +157,12 @@
                  below. The view sets the height of the variables row (0 when the body is not GraphQL). -->
             <Grid x:Name="BodyGrid" RowDefinitions="Auto,3*,Auto,0">
               <Border Padding="10,0,10,2" IsVisible="{Binding IsGraphQLBody}">
-                <TextBlock Text="{l:L rv.gql.query}" Classes="dim" FontSize="11" />
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Classes="flat" Content="{l:L gql.schema.load}" Command="{Binding LoadSchemaCommand}" Foreground="#8a8d93"
+                          FontSize="11" Padding="6,0" IsEnabled="{Binding !IsLoadingSchema}" ToolTip.Tip="{l:L gql.schema.load.tip}" />
+                  <TextBlock Text="{l:L rv.gql.query}" Classes="dim" FontSize="11" Margin="0,0,12,0" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding SchemaStatus}" Classes="dim" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                </DockPanel>
               </Border>
               <Panel Grid.Row="1">
                 <ae:TextEditor x:Name="BodyEditor" IsVisible="{Binding IsComposer}" ShowLineNumbers="True"
@@ -169,6 +174,13 @@
                   </StackPanel>
                 </ScrollViewer>
                 <TextBlock IsVisible="{Binding IsNoBody}" Classes="dim" FontStyle="Italic" Text="{l:L rv.noBody}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <StackPanel IsVisible="{Binding IsBinaryBody}" Margin="10,4,10,8" Spacing="6">
+                  <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="…" Command="{Binding PickBinaryCommand}" Margin="6,0,0,0" ToolTip.Tip="{l:L kv.pickFile}" />
+                    <TextBox Text="{Binding BinaryPath}" Classes="mono" Watermark="{l:L body.binary.watermark}" />
+                  </DockPanel>
+                  <TextBlock Classes="dim" FontSize="11" Text="{l:L body.binary.hint}" TextWrapping="Wrap" />
+                </StackPanel>
               </Panel>
               <GridSplitter Grid.Row="2" ResizeDirection="Rows" Height="4" IsVisible="{Binding IsGraphQLBody}" />
               <DockPanel Grid.Row="3" IsVisible="{Binding IsGraphQLBody}">
@@ -203,7 +215,7 @@
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasResponse}">
               <Button Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyResponseCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L rv.copyResponse.tip}" />
               <Button Classes="flat" Content="{l:L rv.saveResponse.short}" Command="{Binding SaveResponseCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L rv.saveResponse}" IsVisible="{Binding IsHttp}" />
-              <Button Classes="flat" Content="{l:L ws.clear}" Command="{Binding ClearLogCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L ws.clear.tip}" IsVisible="{Binding IsWebSocket}" />
+              <Button Classes="flat" Content="{l:L ws.clear}" Command="{Binding ClearLogCommand}" Foreground="#8a8d93" ToolTip.Tip="{l:L ws.clear.tip}" IsVisible="{Binding HasEventLog}" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="12">
               <TextBlock Classes="section" Text="{Binding ResponseTitle}" />
@@ -223,7 +235,7 @@
         <Border DockPanel.Dock="Top" Background="#222327" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" IsVisible="{Binding HasResponse}">
           <StackPanel Orientation="Horizontal">
             <Button Classes="seg" Classes.active="{Binding IsBodyResponse}" Content="{l:L rv.body}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="body" Padding="12,5" IsVisible="{Binding IsHttp}" />
-            <Button Classes="seg" Classes.active="{Binding IsMessagesResponse}" Content="{Binding WsLogTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="messages" Padding="12,5" IsVisible="{Binding IsWebSocket}" />
+            <Button Classes="seg" Classes.active="{Binding IsMessagesResponse}" Content="{Binding WsLogTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="messages" Padding="12,5" IsVisible="{Binding HasEventLog}" />
             <Button Classes="seg" Classes.active="{Binding IsHeadersResponse}" Content="{Binding ResponseHeadersTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="headers" Padding="12,5" />
             <Button Classes="seg" Classes.active="{Binding IsCookiesResponse}" Content="{Binding ResponseCookiesTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="cookies" Padding="12,5" />
             <Button Classes="seg" Classes.active="{Binding IsTestsResponse}" Content="{Binding ResponseTestsTab}" Command="{Binding ShowResponseSectionCommand}" CommandParameter="tests" Padding="12,5" IsVisible="{Binding IsHttp}" />

@@ -21,6 +21,17 @@ public class CurlTests
     }
 
     [Fact]
+    public void Data_binary_from_a_file_is_a_binary_body()
+    {
+        var r = Curl.Parse("curl -X PUT https://h.test/upload -H 'Content-Type: image/png' --data-binary @img/logo.png")!;
+        Assert.Equal(BodyTypes.Binary, r.Body.Type);
+        Assert.Equal("img/logo.png", r.Body.Data);
+        Assert.Equal("image/png", r.Headers.Single().Value);
+        // Without '@' it is still plain data.
+        Assert.Equal(BodyTypes.Text, Curl.Parse("curl https://h.test --data-binary 'hello there'")!.Body.Type);
+    }
+
+    [Fact]
     public void Parses_chrome_cmd_and_ansi_c_strings()
     {
         var cmd = Curl.Parse("curl ^\"https://h.test/a^\" ^\n  -H ^\"accept: */*^\" ^\n  --compressed")!;

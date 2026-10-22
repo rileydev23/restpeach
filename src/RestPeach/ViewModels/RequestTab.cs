@@ -32,6 +32,10 @@ public interface ICollectionHost
     void RequestEdited(RequestTab tab);
     void RequestSaved(RequestTab tab);
     void RuntimeChanged();
+    /// <summary>GraphQL schemas loaded in this session, by endpoint URL (shared by the tabs that use it).</summary>
+    Dictionary<string, GraphQLSchema> Schemas { get; }
+    /// <summary>A request was sent from a tab: it goes to the history.</summary>
+    void AddHistory(RunResult result);
     Task OpenInTextPeachAsync(string? relPath);
     void Reveal(string relPath);
 }
@@ -81,6 +85,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         new Choice(Core.Model.BodyTypes.Html, "HTML"),
         new Choice(Core.Model.BodyTypes.FormData, "Form-data"),
         new Choice(Core.Model.BodyTypes.UrlEncoded, "x-www-form-urlencoded"),
+        new Choice(Core.Model.BodyTypes.Binary, Loc.T("body.binary")),
     };
 
     public KeyValueTable Params { get; } = new() { KeyWatermark = Loc.T("kv.param") };
@@ -104,12 +109,18 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     [ObservableProperty] private string _url = "";
     [ObservableProperty] private string _description = "";
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsRawBody), nameof(IsFormBody), nameof(IsNoBody), nameof(BodyExtension), nameof(IsGraphQLBody), nameof(IsEditorBody))]
+    [NotifyPropertyChangedFor(nameof(IsRawBody), nameof(IsFormBody), nameof(IsNoBody), nameof(BodyExtension), nameof(IsGraphQLBody), nameof(IsEditorBody), nameof(IsBinaryBody))]
     private Choice _bodyType;
+    /// <summary>Binary body: the file sent, relative to the collection when it is inside it.</summary>
+    [ObservableProperty] private string _binaryPath = "";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasKind), nameof(KindName), nameof(KindTip), nameof(KindBrush), nameof(IsWebSocket), nameof(IsHttp),
-        nameof(CanSend), nameof(CanConnect), nameof(IsComposer), nameof(BodyTab), nameof(BodyExtension), nameof(ResponseTitle))]
+        nameof(CanSend), nameof(CanConnect), nameof(IsComposer), nameof(BodyTab), nameof(BodyExtension), nameof(ResponseTitle), nameof(HasEventLog))]
     private ApiKind _kind;
+    /// <summary>The last response is a Server-Sent Events stream: its events fill the same log as a WebSocket's messages.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasEventLog), nameof(WsLogTab))]
+    private bool _isEventStream;
     [ObservableProperty] private string _testsText = "";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsParamsSection), nameof(IsHeadersSection), nameof(IsAuthSection), nameof(IsBodySection), nameof(IsTestsSection), nameof(IsDocsSection))]
@@ -185,6 +196,9 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         Headers.Changed += Edited;
         BodyFields.Changed += Edited;
         Auth.Changed += Edited;
+        Auth.ConnectOAuth(host.Engine,
+            a => RequestPreparer.ExpandDeferred(a, Runner.Scope(_host.Ws, _host.Config, FolderRel, _host.CurrentEnvironment, _host.Runtime)),
+            () => Options(BuildModel()), host.Notify);
         BodyDocument.TextChanged += (_, _) => Edited();
         VariablesDocument.TextChanged += (_, _) => Edited();
         Load();
@@ -195,6 +209,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public bool IsFormBody => Core.Model.BodyTypes.IsForm(BodyType.Value);
     public bool IsNoBody => BodyType.Value == Core.Model.BodyTypes.None;
     public bool IsGraphQLBody => BodyType.Value == Core.Model.BodyTypes.GraphQL;
+    public bool IsBinaryBody => BodyType.Value == Core.Model.BodyTypes.Binary;
     /// <summary>The body is edited as text (raw bodies, and the query of a GraphQL body).</summary>
     public bool IsEditorBody => IsRawBody || IsGraphQLBody;
     public bool IsWebSocket => Kind == ApiKind.WebSocket;
@@ -204,6 +219,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public bool HasSelectedWsRow => SelectedWsRow is not null;
     public bool HasSelectedSavedMessage => SelectedSavedMessage is not null;
     public bool HasLog => WsLog.Count > 0;
+    public bool HasEventLog => IsWebSocket || IsEventStream;
     public string ResponseTitle => IsWebSocket ? Loc.T("ws.connection") : Loc.T("rv.response");
     public bool HasInsights => Insights.Count > 0;
     public bool HasKind => Kind != ApiKind.Rest;
@@ -266,7 +282,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public string ResponseHeadersTab => Count(Loc.T("rv.headers"), ResponseHeaders.Count);
     public string ResponseCookiesTab => Count(Loc.T("rv.cookies"), ResponseCookies.Count);
     public string ResponseTestsTab => Count(Loc.T("rv.tests"), TestRows.Count);
-    public string WsLogTab => Count(Loc.T("ws.log"), WsLog.Count(r => r.IsMessage));
+    public string WsLogTab => Count(Loc.T(IsWebSocket ? "ws.log" : "sse.events"), WsLog.Count(r => r.IsMessage));
 
     private static string Count(string label, int n) => n > 0 ? $"{label} ({n})" : label;
 
@@ -317,7 +333,8 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
             BodyType = BodyTypes.FirstOrDefault(b => b.Value == r.Body.Type) ?? BodyTypes[0];
             // A WebSocket message is JSON or text; an empty one shows as text.
             if (ApiKinds.IsWebSocket(r) && !MessageTypes.Contains(BodyType)) BodyType = MessageTypes[1];
-            BodyDocument.Text = r.Body.Data;
+            BinaryPath = r.Body.Type == Core.Model.BodyTypes.Binary ? r.Body.Data : "";
+            BodyDocument.Text = r.Body.Type == Core.Model.BodyTypes.Binary ? "" : r.Body.Data;
             VariablesDocument.Text = r.Body.Variables;
             BodyFields.Load(r.Body.Fields);
             TestsText = string.Join("\n", r.Tests);
@@ -333,6 +350,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
             _syncingParams = false;
         }
         NotifyTabs();
+        if (IsGraphQLBody) RefreshSchemaStatus();
         _host.RequestEdited(this);
     }
 
@@ -342,7 +360,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
     public ApiRequest BuildModel()
     {
         var all = Params.ToList();
-        var body = new BodySpec { Type = BodyType.Value, Data = BodyDocument.Text, Variables = VariablesDocument.Text, Fields = BodyFields.ToList() };
+        var body = new BodySpec { Type = BodyType.Value, Data = IsBinaryBody ? BinaryPath.Trim() : BodyDocument.Text, Variables = VariablesDocument.Text, Fields = BodyFields.ToList() };
         if (Method == ApiRequest.WebSocket || ApiKinds.IsWebSocketUrl(Url))
         {
             // The message being written: kept (and sent by collection runs) only when there is one.
@@ -441,12 +459,26 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         // Choosing a raw type the first time pre-fills nothing, but keeps what was typed for another raw type.
         // A GraphQL body starts from an empty operation, so the editor is not a blank page.
         if (!_loading && value.Value == Core.Model.BodyTypes.GraphQL && BodyDocument.TextLength == 0) BodyDocument.Text = "query {\n  \n}";
+        if (value.Value == Core.Model.BodyTypes.GraphQL) RefreshSchemaStatus();
         BodyTypeChangedForView?.Invoke();
         Edited();
         if (!_loading) Kind = ApiKinds.Of(BuildModel());
     }
 
     partial void OnDescriptionChanged(string value) => Edited();
+    partial void OnBinaryPathChanged(string value) => Edited();
+
+    /// <summary>Binary body: "…" picks the file; inside the collection it is kept relative, so the path works in every clone.</summary>
+    [RelayCommand]
+    private async Task PickBinaryAsync()
+    {
+        var path = await Views.Dialogs.PickFile(Loc.T("kv.pickFile"));
+        if (path is null) return;
+        var root = _host.Ws.ProjectRoot;
+        BinaryPath = root.Length > 0 && path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            ? Path.GetRelativePath(root, path).Replace('\\', '/')
+            : path;
+    }
     partial void OnTestsTextChanged(string value) => Edited();
 
     private void Edited()
@@ -567,6 +599,53 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
 
     // ------------------------------------------------------------ sending
 
+    // ------------------------------------------------------------ GraphQL schema
+
+    [ObservableProperty] private string _schemaStatus = "";
+    [ObservableProperty] private bool _isLoadingSchema;
+
+    /// <summary>The schema of this request's endpoint, if it was loaded (by this tab or another one).</summary>
+    public GraphQLSchema? Schema
+    {
+        get
+        {
+            try { return _host.Schemas.GetValueOrDefault(Prepare().Url.Split('?')[0]); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+        }
+    }
+
+    public void RefreshSchemaStatus() => SchemaStatus = Schema is { } s ? s.Summary + " · " + Loc.T("gql.schema.hint") : "";
+
+    /// <summary>Introspection with this request's URL, headers and auth (POST, whatever the method is).</summary>
+    [RelayCommand]
+    private async Task LoadSchemaAsync()
+    {
+        if (IsLoadingSchema) return;
+        var model = BuildModel();
+        model.Method = "POST";
+        model.Tests = new List<string>();
+        model.Body = new BodySpec { Type = Core.Model.BodyTypes.GraphQL, Data = GraphQLSchema.IntrospectionQuery };
+        PreparedRequest prepared;
+        try { prepared = Runner.Prepare(_host.Ws, _host.Config, FolderRel, model, _host.CurrentEnvironment, _host.Runtime); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { _host.Notify(e.Message); return; }
+        IsLoadingSchema = true;
+        SchemaStatus = Loc.T("gql.schema.loading");
+        try
+        {
+            var res = await _host.Engine.SendAsync(prepared, Options(model), CancellationToken.None);
+            if (res.Error is not null) throw new FormatException(res.Error);
+            var schema = await Task.Run(() => GraphQLSchema.Parse(res.Text));
+            _host.Schemas[prepared.Url.Split('?')[0]] = schema;
+            RefreshSchemaStatus();
+            _host.Notify(schema.Summary);
+        }
+        catch (Exception e) when (e is FormatException or System.Text.Json.JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            SchemaStatus = Loc.F("gql.schema.failed", e.Message);
+        }
+        finally { IsLoadingSchema = false; }
+    }
+
     public PreparedRequest Prepare(Func<string, string>? mask = null) =>
         Runner.Prepare(_host.Ws, _host.Config, FolderRel, BuildModel(), _host.CurrentEnvironment, _host.Runtime, mask);
 
@@ -581,6 +660,10 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { ResolvedUrl = Url; MissingText = ""; }
     }
+
+    /// <summary>The collection's connection settings for this request, with their {{variables}} expanded.</summary>
+    private HttpOptions Options(ApiRequest model) =>
+        HttpOptions.For(_host.Config, model, Runner.Scope(_host.Ws, _host.Config, FolderRel, _host.CurrentEnvironment, _host.Runtime), _host.Ws.ProjectRoot);
 
     [RelayCommand]
     private async Task SendAsync()
@@ -601,11 +684,14 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
 
         var cts = _sendCts = new CancellationTokenSource();
         IsSending = true;
+        IsEventStream = false;
+        if (ResponseSection == "messages") ResponseSection = "body";
         _host.Notify(Loc.F("rv.sending", prepared.Method, prepared.Url));
         try
         {
-            var response = await _host.Engine.SendAsync(prepared, HttpOptions.For(_host.Config, model), cts.Token);
+            var response = await _host.Engine.SendAsync(prepared, Options(model), cts.Token, new LiveEvents(this));
             var results = response.Error is null ? Assertions.Evaluate(model.Tests, response, _host.Runtime) : new List<AssertionResult>();
+            _host.AddHistory(new RunResult(RelPath, model, prepared, response, results, null));
             await ShowResponseAsync(response, results, prepared.Kind);
             if (results.Any(r => r.IsCapture && r.Passed)) _host.RuntimeChanged();
             _host.Notify(response.Error is null
@@ -721,7 +807,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         _host.Notify(Loc.F("ws.connecting", prepared.Url));
         try
         {
-            var (session, handshake) = await WebSocketSession.ConnectAsync(prepared, HttpOptions.For(_host.Config, model), _host.Engine, cts.Token);
+            var (session, handshake) = await WebSocketSession.ConnectAsync(prepared, Options(model), _host.Engine, cts.Token);
             ShowHandshake(handshake, prepared.Url);
             if (session is null)
             {
@@ -874,7 +960,44 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         _ = session.DisposeAsync().AsTask();
     }
 
-    private void Log(WsDirection d, string text, DateTimeOffset? at = null, string size = "")
+    /// <summary>Hands the events of a stream to the log as they arrive (the engine reads on a background thread).</summary>
+    private sealed class LiveEvents(RequestTab tab) : IStreamListener
+    {
+        private readonly SseParser _parser = new();
+
+        public void Started(ApiResponse head) => Dispatcher.UIThread.Post(() => tab.StreamStarted(head));
+
+        public void Data(byte[] chunk)
+        {
+            var events = _parser.Feed(chunk);
+            if (events.Count > 0) Dispatcher.UIThread.Post(() => tab.StreamEvents(events));
+        }
+    }
+
+    private void StreamStarted(ApiResponse head)
+    {
+        ClearLog();
+        IsEventStream = true;
+        ResponseUrl = head.FinalUrl;
+        ResponseError = null;
+        Insights = Array.Empty<InsightRow>();
+        StatusText = $"{head.Status} {head.Reason}";
+        StatusBrush = Look.StatusBadge(head.Status, false);
+        TimeText = ResponseFormatter.Duration(head.ElapsedMs);
+        SizeText = "";
+        ResponseHeaders = head.Headers.Select(h => new HeaderRow(h.Key, h.Value)).ToList();
+        OnPropertyChanged(nameof(ResponseHeadersTab));
+        ResponseSection = "messages";
+        Log(WsDirection.Info, Loc.T("sse.started"));
+    }
+
+    private void StreamEvents(List<SseEvent> events)
+    {
+        foreach (var e in events)
+            Log(WsDirection.Received, e.Data, size: ResponseFormatter.Size(System.Text.Encoding.UTF8.GetByteCount(e.Data)), label: e.Event == "message" ? null : e.Event);
+    }
+
+    private void Log(WsDirection d, string text, DateTimeOffset? at = null, string size = "", string? label = null)
     {
         var (glyph, brush) = d switch
         {
@@ -884,6 +1007,7 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
             _ => ("•", Palette.Dim),
         };
         var preview = Regex.Replace(text.Length > 600 ? text[..600] : text, @"\s+", " ").Trim();
+        if (label is not null) preview = label + " · " + preview;
         var row = new WsLogRow((at ?? DateTimeOffset.Now).ToString("HH:mm:ss.fff"), glyph, brush, preview, text, size, d is WsDirection.Sent or WsDirection.Received);
         // A chatty socket (an event feed) can send thousands: the oldest lines go.
         if (WsLog.Count >= MaxLogRows) WsLog.RemoveAt(0);
@@ -912,6 +1036,15 @@ public sealed partial class RequestTab : TabViewModel, IDisposable
         var p = Prepare();
         await cb.SetTextAsync(Curl.Write(p));
         _host.Notify(Loc.T("rv.curlCopied"));
+    }
+
+    /// <summary>The request as code in <paramref name="language"/>, with the real values (the panel shows them masked).</summary>
+    public async Task CopyCodeAsync(Choice language)
+    {
+        if (Dialogs.Owner?.Clipboard is not { } cb) return;
+        if (IsWebSocket) { _host.Notify(Loc.T("ws.noCurl")); return; }
+        await cb.SetTextAsync(CodeGen.Generate(language.Value, Prepare()));
+        _host.Notify(Loc.F("rv.codeCopied", language.Label));
     }
 
     [RelayCommand]

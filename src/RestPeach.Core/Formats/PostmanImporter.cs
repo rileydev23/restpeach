@@ -121,10 +121,38 @@ public static class PostmanImporter
             case "basic": return new AuthSpec { Type = AuthTypes.Basic, Username = P("basic", "username"), Password = P("basic", "password") };
             case "apikey":
                 return new AuthSpec { Type = AuthTypes.ApiKey, Key = P("apikey", "key"), Value = P("apikey", "value"), In = P("apikey", "in") == "query" ? "query" : "header" };
+            case "digest":
+                return new AuthSpec { Type = AuthTypes.Digest, Username = P("digest", "username"), Password = P("digest", "password") };
+            case "awsv4":
+                return new AuthSpec
+                {
+                    Type = AuthTypes.AwsSigV4, AccessKey = P("awsv4", "accessKey"), SecretKey = P("awsv4", "secretKey"),
+                    Region = P("awsv4", "region"), Service = P("awsv4", "service"), SessionToken = P("awsv4", "sessionToken"),
+                };
             case "oauth2":
-                var token = P("oauth2", "accessToken");
-                warnings.Add(Loc.F(token.Length > 0 ? "imp.oauth2.kept" : "imp.oauth2.set", where));
-                return AuthSpec.BearerOf(token.Length > 0 ? token : "{{ACCESS_TOKEN}}");
+                var grant = P("oauth2", "grant_type");
+                var tokenUrl = P("oauth2", "accessTokenUrl");
+                if (tokenUrl.Length == 0 || grant == "implicit")
+                {
+                    // Nothing to ask a token from (or a grant RestPeach does not do): keep the token Postman had.
+                    var token = P("oauth2", "accessToken");
+                    warnings.Add(Loc.F(token.Length > 0 ? "imp.oauth2.kept" : "imp.oauth2.set", where));
+                    return AuthSpec.BearerOf(token.Length > 0 ? token : "{{ACCESS_TOKEN}}");
+                }
+                return new AuthSpec
+                {
+                    Type = AuthTypes.OAuth2,
+                    Grant = grant switch
+                    {
+                        "password_credentials" or "password" => OAuthGrants.Password,
+                        "authorization_code" or "authorization_code_with_pkce" => OAuthGrants.AuthorizationCode,
+                        _ => OAuthGrants.ClientCredentials,
+                    },
+                    TokenUrl = tokenUrl, AuthUrl = P("oauth2", "authUrl"), ClientId = P("oauth2", "clientId"), ClientSecret = P("oauth2", "clientSecret"),
+                    Scope = P("oauth2", "scope"), Username = P("oauth2", "username"), Password = P("oauth2", "password"),
+                    RedirectUri = P("oauth2", "redirect_uri").StartsWith("http://127.0.0.1") || P("oauth2", "redirect_uri").StartsWith("http://localhost") ? P("oauth2", "redirect_uri") : "",
+                    ClientAuth = P("oauth2", "client_authentication") == "body" ? "body" : "basic",
+                };
             case "":
                 return new AuthSpec();
             default:
@@ -170,8 +198,9 @@ public static class PostmanImporter
                     Variables = vars.Trim() is "" or "{}" ? "" : CanonicalJson.Pretty(vars) ?? vars,
                 };
             case "file":
-                warnings.Add(Loc.F("imp.binaryBody", where));
-                return new BodySpec();
+                var filePath = body.Obj("file")?.Str("src") ?? "";
+                if (filePath.Length == 0) warnings.Add(Loc.F("imp.binaryBody", where));
+                return filePath.Length == 0 ? new BodySpec() : new BodySpec { Type = BodyTypes.Binary, Data = filePath };
             default:
                 return new BodySpec();
         }

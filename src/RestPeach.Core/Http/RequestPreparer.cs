@@ -11,11 +11,17 @@ public sealed class PreparedRequest
     public List<KeyValuePair<string, string>> Headers { get; } = new();
     /// <summary><see cref="BodyTypes"/> value.</summary>
     public string BodyType { get; init; } = BodyTypes.None;
+    /// <summary>The text body; for a binary body, the absolute path of the file.</summary>
     public string RawBody { get; init; } = "";
     /// <summary>The style of API (a GraphQL body has already become JSON here).</summary>
     public ApiKind Kind { get; init; } = ApiKind.Rest;
     /// <summary>Form fields (active only); file fields carry an absolute path.</summary>
     public List<KeyValue> Fields { get; } = new();
+    /// <summary>
+    /// Digest, AWS Signature V4 or OAuth 2.0 with its fields expanded: the engine applies it when sending (it needs
+    /// the server's challenge, the final bytes, or a token from elsewhere).
+    /// </summary>
+    public AuthSpec? Deferred { get; set; }
     /// <summary>Variables referenced but not defined anywhere.</summary>
     public SortedSet<string> Missing { get; } = new(StringComparer.Ordinal);
 
@@ -50,6 +56,11 @@ public static class RequestPreparer
         }
         var bodyType = req.Body.Type;
         var raw = BodyTypes.IsRaw(bodyType) ? X(req.Body.Data) : "";
+        if (bodyType == BodyTypes.Binary)
+        {
+            raw = X(req.Body.Data).Trim();
+            if (raw.Length > 0 && !Path.IsPathRooted(raw) && filesBase.Length > 0) raw = Path.GetFullPath(Path.Combine(filesBase, raw));
+        }
         if (bodyType == BodyTypes.GraphQL)
         {
             // GraphQL over HTTP: POST {"query", "variables"} as JSON, or the same two as query parameters for GET.
@@ -95,6 +106,9 @@ public static class RequestPreparer
                 if (auth.In == "query") p.Url = QueryString.Append(p.Url, Uri.EscapeDataString(key), Uri.EscapeDataString(value));
                 else if (!p.HasHeader(key)) p.Headers.Add(new(key, value));
                 break;
+            case var t when AuthTypes.IsDeferred(t) && !p.HasHeader("Authorization"):
+                p.Deferred = ExpandDeferred(auth, X);
+                break;
         }
 
         if (BodyTypes.IsForm(req.Body.Type))
@@ -107,12 +121,26 @@ public static class RequestPreparer
             }
         }
         // multipart sets its own boundary, so only the other bodies get a default Content-Type.
-        if (kind != ApiKind.WebSocket && p.BodyType != BodyTypes.FormData && BodyTypes.DefaultContentType(p.BodyType) is { } ct && !p.HasHeader("Content-Type"))
+        if (kind != ApiKind.WebSocket && p.BodyType != BodyTypes.FormData && !p.HasHeader("Content-Type")
+            && (p.BodyType == BodyTypes.Binary ? (raw.Length > 0 ? HttpEngine.MimeFor(raw) : null) : BodyTypes.DefaultContentType(p.BodyType)) is { } ct)
             p.Headers.Add(new("Content-Type", ct));
 
         foreach (var m in missing) p.Missing.Add(m);
         return p;
     }
+
+    /// <summary>Digest, AWS or OAuth 2.0 auth with every field expanded, as the engine uses it.</summary>
+    public static AuthSpec ExpandDeferred(AuthSpec auth, VariableScope scope) => ExpandDeferred(auth, s => Interpolator.Expand(s, scope));
+
+    private static AuthSpec ExpandDeferred(AuthSpec auth, Func<string, string> X) => new()
+    {
+        Type = auth.Type, Username = X(auth.Username), Password = X(auth.Password),
+        AccessKey = X(auth.AccessKey).Trim(), SecretKey = X(auth.SecretKey).Trim(), Region = X(auth.Region).Trim(),
+        Service = X(auth.Service).Trim(), SessionToken = X(auth.SessionToken).Trim(),
+        Grant = auth.Grant, TokenUrl = NormalizeUrl(X(auth.TokenUrl).Trim()), AuthUrl = NormalizeUrl(X(auth.AuthUrl).Trim()),
+        ClientId = X(auth.ClientId).Trim(), ClientSecret = X(auth.ClientSecret), Scope = X(auth.Scope).Trim(),
+        RedirectUri = X(auth.RedirectUri).Trim(), ClientAuth = auth.ClientAuth,
+    };
 
     /// <summary>
     /// <c>{"query": …, "variables": …}</c>. Variables that are not valid JSON go in as typed, so the server's error
@@ -121,7 +149,7 @@ public static class RequestPreparer
     public static string GraphQLEnvelope(string query, string variables)
     {
         var sb = new StringBuilder("{\n  \"query\": ");
-        sb.Append(System.Text.Json.JsonSerializer.Serialize(query, Text.CanonicalJson.StringOptions));
+        sb.Append('"').Append(System.Text.Json.JsonEncodedText.Encode(query, System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping)).Append('"');
         if (variables.Length > 0)
         {
             var vars = Text.CanonicalJson.Pretty(variables)?.Replace("\n", "\n  ") ?? variables;

@@ -109,7 +109,7 @@ internal static class Program
 
     private static async Task<int> RunAsync(string[] raw)
     {
-        var a = Args.Parse(raw, "--env", "-e", "--timeout", "--filter", "--var");
+        var a = Args.Parse(raw, "--env", "-e", "--timeout", "--filter", "--var", "--proxy");
         var (ws, rel, isFile) = Locate(a.Positional.FirstOrDefault());
         var env = a.Get("--env", "-e");
         if (env is not null && !ws.ListEnvironments().Contains(env, StringComparer.OrdinalIgnoreCase))
@@ -130,6 +130,7 @@ internal static class Program
 
         var config = ws.LoadConfig();
         if (a.Get("--timeout") is { } t && int.TryParse(t, out var ms)) { config.TimeoutMs = ms; }
+        if (a.Get("--proxy") is { } proxy) config.Proxy = proxy;
         using var engine = new HttpEngine();
         var runner = new Runner(ws, engine, env, runtime, config);
         bool verbose = a.Has("--verbose", "-V");

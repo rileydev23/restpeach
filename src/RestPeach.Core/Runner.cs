@@ -73,7 +73,7 @@ public sealed class Runner
         PreparedRequest prepared;
         try { prepared = Prepare(_ws, _config, Workspace.ParentOf(relPath), req, _env, Runtime); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return new RunResult(relPath, req, null, null, Array.Empty<AssertionResult>(), e.Message); }
-        var options = HttpOptions.For(_config, req);
+        var options = HttpOptions.For(_config, req, Scope(_ws, _config, Workspace.ParentOf(relPath), _env, Runtime), _ws.ProjectRoot);
         var response = prepared.Kind == ApiKind.WebSocket
             ? await WebSocketSession.ProbeAsync(prepared, options, _engine, ct)
             : await _engine.SendAsync(prepared, options, ct);

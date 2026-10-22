@@ -32,6 +32,37 @@
             <CheckBox Grid.Row="8" Grid.Column="1" Content="{l:L set.tls}" IsChecked="{Binding VerifyTls}" ToolTip.Tip="{l:L set.tls.tip}" />
           </Grid>
           <Border Height="1" Background="#3a3c42" Margin="0,6" />
+
+          <TextBlock Classes="section" Text="{l:L set.network}" />
+          <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,6,Auto,6,Auto">
+            <TextBlock Text="{l:L set.http}" Classes="dim" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding HttpVersions}" SelectedItem="{Binding HttpVersion}" MinWidth="240" ToolTip.Tip="{l:L set.http.tip}" />
+            <TextBlock Grid.Row="2" Text="{l:L set.proxy}" Classes="dim" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding ProxyModes}" SelectedItem="{Binding ProxyMode}" MinWidth="240" ToolTip.Tip="{l:L set.proxy.tip}" />
+            <TextBox Grid.Row="4" Grid.Column="1" Classes="mono" Text="{Binding ProxyUrl}" IsVisible="{Binding IsManualProxy}" MaxWidth="480" HorizontalAlignment="Left" MinWidth="360"
+                     Watermark="http://proxy.empresa:8080 · socks5://127.0.0.1:1080 · {{PROXY}}" />
+          </Grid>
+          <StackPanel Spacing="2" Margin="0,6,0,0">
+            <TextBlock Text="{l:L set.cert}" FontWeight="SemiBold" />
+            <TextBlock Classes="dim" FontSize="12" Text="{l:L set.cert.hint}" TextWrapping="Wrap" />
+          </StackPanel>
+          <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,6,Auto,6,Auto,6,Auto">
+            <TextBlock Text="{l:L set.cert.file}" Classes="dim" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+              <TextBox Classes="mono" Text="{Binding CertPath}" Width="360" Watermark="certs/cliente.pfx" />
+              <Button Content="…" Command="{Binding PickCertCommand}" ToolTip.Tip="{l:L kv.pickFile}" />
+            </StackPanel>
+            <TextBlock Grid.Row="2" Text="{l:L set.cert.key}" Classes="dim" VerticalAlignment="Center" IsVisible="{Binding IsPemCert}" />
+            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsPemCert}">
+              <TextBox Classes="mono" Text="{Binding CertKey}" Width="360" Watermark="{l:L set.cert.key.watermark}" />
+              <Button Content="…" Command="{Binding PickKeyCommand}" ToolTip.Tip="{l:L kv.pickFile}" />
+            </StackPanel>
+            <TextBlock Grid.Row="4" Text="{l:L auth.password}" Classes="dim" VerticalAlignment="Center" />
+            <TextBox Grid.Row="4" Grid.Column="1" Classes="mono" Text="{Binding CertPassword}" Width="360" HorizontalAlignment="Left" Watermark="{}{{CERT_PASSWORD}}" />
+            <TextBlock Grid.Row="6" Text="{l:L set.cert.host}" Classes="dim" VerticalAlignment="Center" />
+            <TextBox Grid.Row="6" Grid.Column="1" Classes="mono" Text="{Binding CertHost}" Width="360" HorizontalAlignment="Left" Watermark="{l:L set.cert.host.watermark}" />
+          </Grid>
+          <Border Height="1" Background="#3a3c42" Margin="0,6" />
         </StackPanel>
 
         <StackPanel Spacing="2">

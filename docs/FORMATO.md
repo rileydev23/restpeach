@@ -40,6 +40,9 @@ Todo lo que RestPeach guarda de una colección es texto plano dentro de la carpe
 | `timeoutMs` | Tiempo máximo de cada petición (100 ms a 1 h). |
 | `followRedirects` | Seguir redirecciones 3xx. |
 | `verifyTls` | Verificar el certificado del servidor. Desactívalo solo para servidores locales. |
+| `httpVersion` | Opcional: `"2"` o `"3"` piden esa versión (y bajan si el servidor no la habla). Sin él, HTTP/1.1. |
+| `proxy` | Opcional: `"none"` (directo) o la URL del proxy (`http://usuario:clave@host:8080`, `socks5://host:1080`; admite `{{VARIABLES}}`). Sin él, el del sistema o `HTTP_PROXY` / `HTTPS_PROXY`. `restpeach-cli run --proxy` lo reemplaza. |
+| `clientCertificate` | Opcional: `{"path", "key", "password", "host"}` para TLS mutuo. `path` es un `.pfx`/`.p12` o un certificado PEM (`key`, su clave, si está aparte); rutas relativas al proyecto; `password` conviene que sea un `{{SECRETO}}`; con `host`, solo se ofrece a ese dominio. |
 | `order` | Orden de lo que está en la raíz de la colección (ver [Orden](#orden)). |
 
 ## `folder.json` (una carpeta, opcional)
@@ -116,6 +119,9 @@ tests:
 | `bearer` | `token` | `Authorization: Bearer <token>` |
 | `basic` | `username`, `password` | `Authorization: Basic <base64>` |
 | `apikey` | `key`, `value`, `in` (`header` o `query`) | Un header `<key>: <value>` o el parámetro `?<key>=<value>`. |
+| `digest` | `username`, `password` | Se envía sin credenciales, y al 401 con el desafío `Digest` se responde (MD5 o SHA-256, `qop=auth`). |
+| `awsv4` | `accessKey`, `secretKey`, `region`, `service`, `sessionToken` (opcional) | Cada envío se firma con AWS Signature V4 (`Authorization`, `X-Amz-Date`). |
+| `oauth2` | `grant` (`client_credentials`, `password` o `authorization_code`), `tokenUrl`, `clientId`, `clientSecret`, `scope`; `username`/`password` (password); `authUrl`, `redirectUri` (authorization code); `clientAuth` (`basic` o `body`) | `Authorization: Bearer <token>`. El token se pide al enviar, vive solo en memoria y se renueva con el refresh token; authorization code abre el navegador (PKCE) y escucha en `127.0.0.1`. |
 
 Si la petición ya tiene un header `Authorization`, la auth no lo reemplaza.
 
@@ -127,6 +133,7 @@ Si la petición ya tiene un header `Authorization`, la auth no lo reemplaza.
 | `json`, `text`, `xml`, `html` | `data` (texto) | `application/json`, `text/plain`, `application/xml`, `text/html` |
 | `urlencoded` | `fields` | `application/x-www-form-urlencoded` |
 | `form-data` | `fields`; un campo con `"type": "file"` envía el archivo de `value` (ruta relativa al proyecto) | `multipart/form-data` con su *boundary* |
+| `binary` | `data`: la ruta del archivo (relativa al proyecto, admite `{{VARIABLES}}`) | según la extensión (`image/png`, `application/pdf`…) |
 | `graphql` | `query` (texto) y `variables` (objeto JSON, o texto si tiene `{{VARIABLES}}` fuera de comillas) | `application/json` |
 
 Un body `graphql` se envía como `{"query": …, "variables": …}` en JSON; con `GET`, como `?query=…&variables=…` en la

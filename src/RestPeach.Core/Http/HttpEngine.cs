@@ -7,13 +7,46 @@ using RestPeach.Core.Model;
 
 namespace RestPeach.Core.Http;
 
+/// <summary>
+/// How to send: everything here is already expanded. <see cref="Proxy"/>: "" = the system's, "none", or a URL.
+/// <see cref="CertPath"/> and <see cref="CertKey"/> are absolute; <see cref="CertHost"/> limits who gets the certificate.
+/// </summary>
 public sealed record HttpOptions(int TimeoutMs = 30000, bool FollowRedirects = true, bool VerifyTls = true)
 {
-    public static HttpOptions From(WorkspaceConfig c) => new(c.TimeoutMs, c.FollowRedirects, c.VerifyTls);
+    public string HttpVersion { get; init; } = "";
+    public string Proxy { get; init; } = "";
+    public string CertPath { get; init; } = "";
+    public string CertKey { get; init; } = "";
+    public string CertPassword { get; init; } = "";
+    public string CertHost { get; init; } = "";
 
-    /// <summary>The collection's settings with what <paramref name="r"/> overrides for itself.</summary>
-    public static HttpOptions For(WorkspaceConfig c, ApiRequest r) => From(c) with { FollowRedirects = r.FollowRedirects ?? c.FollowRedirects };
+    /// <summary>
+    /// The collection's settings with what <paramref name="r"/> overrides for itself. <paramref name="scope"/> expands
+    /// the proxy and the certificate fields; <paramref name="root"/> is what relative certificate paths start from.
+    /// </summary>
+    public static HttpOptions For(WorkspaceConfig c, ApiRequest? r = null, VariableScope? scope = null, string root = "")
+    {
+        scope ??= new VariableScope();
+        string X(string s) => Interpolator.Expand(s, scope).Trim();
+        string Abs(string s) => s.Length == 0 || Path.IsPathRooted(s) || root.Length == 0 ? s : Path.GetFullPath(Path.Combine(root, s));
+        var cert = c.ClientCert;
+        return new HttpOptions(c.TimeoutMs, r?.FollowRedirects ?? c.FollowRedirects, c.VerifyTls)
+        {
+            HttpVersion = c.HttpVersion,
+            Proxy = X(c.Proxy),
+            CertPath = cert.IsEmpty ? "" : Abs(X(cert.Path)),
+            CertKey = cert.IsEmpty ? "" : Abs(X(cert.Key)),
+            CertPassword = cert.IsEmpty ? "" : Interpolator.Expand(cert.Password, scope),
+            CertHost = cert.IsEmpty ? "" : X(cert.Host),
+        };
+    }
+
+    /// <summary>The part of the options a connection pool depends on (the timeout is per request).</summary>
+    internal HttpOptions PoolKey => this with { TimeoutMs = 0 };
 }
+
+/// <summary>One redirect that was followed: the status, where it pointed and how long that hop took.</summary>
+public sealed record RedirectHop(int Status, string From, string To, double ElapsedMs);
 
 /// <summary>What came back. <see cref="Error"/> is set (and <see cref="Status"/> is 0) when no response arrived.</summary>
 public sealed class ApiResponse
@@ -36,6 +69,8 @@ public sealed class ApiResponse
     public string? Interrupted { get; init; }
     /// <summary>WebSocket runs: the server closed the connection itself, with this code and reason ("1008 Unauthorized").</summary>
     public string? WebSocketClose { get; init; }
+    /// <summary>The redirects followed before this response, in order (empty when there were none).</summary>
+    public List<RedirectHop> Redirects { get; init; } = new();
     public DateTimeOffset At { get; init; } = DateTimeOffset.Now;
 
     public bool Ok => Error is null && Status is >= 200 and < 400;
@@ -68,6 +103,18 @@ public sealed class ApiResponse
 }
 
 /// <summary>
+/// Watches an event stream (<c>text/event-stream</c>) while it arrives: the app's live view. With one, such a stream
+/// has no overall timeout, only one between chunks (the collection's timeout), and runs until it ends or is cancelled.
+/// </summary>
+public interface IStreamListener
+{
+    /// <summary>The headers arrived: <paramref name="head"/> has the status and headers, no body yet.</summary>
+    void Started(ApiResponse head);
+    /// <summary>Called from a background thread; the array is the listener's to keep.</summary>
+    void Data(byte[] chunk);
+}
+
+/// <summary>
 /// Sends prepared requests. One engine per open collection keeps its own cookie jar in memory (never written to disk,
 /// never sent anywhere else) and reuses connections. No telemetry, no proxies of its own: only the request you sent.
 /// </summary>
@@ -77,14 +124,45 @@ public sealed class HttpEngine : IDisposable
     public static readonly string UserAgent = "RestPeach/" + (typeof(HttpEngine).Assembly.GetName().Version?.ToString(3) ?? "1.0");
 
     public CookieContainer Cookies { get; private set; } = new();
-    private readonly Dictionary<(bool Redirects, bool Tls), HttpClient> _clients = new();
-    private readonly Dictionary<bool, HttpMessageInvoker> _webSockets = new();
+    private readonly Dictionary<HttpOptions, HttpClient> _clients = new();
+    private readonly Dictionary<HttpOptions, HttpMessageInvoker> _webSockets = new();
     private readonly object _lock = new();
+    private readonly Dictionary<string, OAuthToken> _tokens = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _tokenGate = new(1, 1);
+
+    /// <summary>The OAuth 2.0 token for <paramref name="a"/> (expanded), from memory while it is good, else asked for.</summary>
+    public async Task<OAuthToken> OAuthTokenAsync(AuthSpec a, HttpOptions options, bool fresh, CancellationToken ct)
+    {
+        var key = OAuth2.CacheKey(a);
+        // One at a time: a run of ten requests asks for one token, not ten (and opens one browser, not ten).
+        await _tokenGate.WaitAsync(ct);
+        try
+        {
+            OAuthToken? cached;
+            lock (_lock) _tokens.TryGetValue(key, out cached);
+            if (!fresh && cached is not null && !cached.IsExpired(DateTimeOffset.Now)) return cached;
+            var token = await OAuth2.RequestAsync(a, ClientFor(options with { FollowRedirects = true }), fresh ? null : cached, ct);
+            lock (_lock) _tokens[key] = token;
+            return token;
+        }
+        finally { _tokenGate.Release(); }
+    }
+
+    public OAuthToken? CachedToken(AuthSpec a)
+    {
+        lock (_lock) return _tokens.TryGetValue(OAuth2.CacheKey(a), out var t) ? t : null;
+    }
+
+    public void ForgetToken(AuthSpec a)
+    {
+        lock (_lock) _tokens.Remove(OAuth2.CacheKey(a));
+    }
 
     public void ClearCookies()
     {
         lock (_lock)
         {
+            _tokens.Clear();
             foreach (var c in _clients.Values) c.Dispose();
             _clients.Clear();
             foreach (var w in _webSockets.Values) w.Dispose();
@@ -99,9 +177,9 @@ public sealed class HttpEngine : IDisposable
     {
         lock (_lock)
         {
-            var key = (o.FollowRedirects, o.VerifyTls);
+            var key = o.PoolKey;
             if (_clients.TryGetValue(key, out var c)) return c;
-            c = new HttpClient(Handler(o.FollowRedirects, o.VerifyTls)) { Timeout = Timeout.InfiniteTimeSpan };
+            c = new HttpClient(Handler(key)) { Timeout = Timeout.InfiniteTimeSpan };
             _clients[key] = c;
             return c;
         }
@@ -115,18 +193,19 @@ public sealed class HttpEngine : IDisposable
     {
         lock (_lock)
         {
-            if (_webSockets.TryGetValue(o.VerifyTls, out var w)) return w;
-            w = new HttpMessageInvoker(Handler(false, o.VerifyTls));
-            _webSockets[o.VerifyTls] = w;
+            var key = o.PoolKey with { FollowRedirects = false };
+            if (_webSockets.TryGetValue(key, out var w)) return w;
+            w = new HttpMessageInvoker(Handler(key));
+            _webSockets[key] = w;
             return w;
         }
     }
 
-    private SocketsHttpHandler Handler(bool followRedirects, bool verifyTls)
+    private SocketsHttpHandler Handler(HttpOptions o)
     {
         var handler = new SocketsHttpHandler
         {
-            AllowAutoRedirect = followRedirects,
+            AllowAutoRedirect = o.FollowRedirects,
             MaxAutomaticRedirections = 10,
             AutomaticDecompression = DecompressionMethods.All,
             CookieContainer = Cookies,
@@ -135,15 +214,19 @@ public sealed class HttpEngine : IDisposable
             ConnectTimeout = TimeSpan.FromSeconds(15),
             ConnectCallback = ConnectAnyAsync,
         };
-        if (!verifyTls) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+        if (!o.VerifyTls) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+        Network.ApplyProxy(handler, o.Proxy);
+        if (o.CertPath.Length > 0) Network.ApplyClientCertificate(handler, o);
         return handler;
     }
 
-    public async Task<ApiResponse> SendAsync(PreparedRequest p, HttpOptions options, CancellationToken ct)
+    public async Task<ApiResponse> SendAsync(PreparedRequest p, HttpOptions options, CancellationToken ct, IStreamListener? listener = null)
     {
         var sw = Stopwatch.StartNew();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(options.TimeoutMs);
+        var sent = new List<HttpRequestMessage>();
+        var hops = new List<RedirectHop>();
+        HttpResponseMessage? res = null;
         try
         {
             if (p.Missing.Count > 0 && p.Url.Contains("{{"))
@@ -151,13 +234,81 @@ public sealed class HttpEngine : IDisposable
             if (!Uri.TryCreate(p.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
                 throw new UriFormatException(p.Url);
 
-            using var msg = Build(p, uri);
-            using var res = await ClientFor(options).SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-            var (body, truncated, interrupted) = await ReadBodyAsync(res, timeout.Token, ct);
-            sw.Stop();
+            // An OAuth token may need a login in the browser: that wait is not part of the request's time.
+            OAuthToken? token = null;
+            if (p.Deferred is { Type: AuthTypes.OAuth2 } oauth)
+            {
+                token = await OAuthTokenAsync(oauth, options, false, ct);
+                sw.Restart();
+            }
+            timeout.CancelAfter(options.TimeoutMs);
+
+            // Redirects are followed here, not by the handler, so every hop can be shown.
+            var client = ClientFor(options with { FollowRedirects = false });
+            async Task<HttpResponseMessage> SendOnce(HttpRequestMessage m, string? authorization, bool sign)
+            {
+                sent.Add(m);
+                Network.ApplyVersion(m, options.HttpVersion);
+                if (authorization is not null) m.Headers.TryAddWithoutValidation("Authorization", authorization);
+                if (sign && p.Deferred is { Type: AuthTypes.AwsSigV4 } aws) await AwsSigV4.SignAsync(m, aws, DateTime.UtcNow, timeout.Token);
+                return await client.SendAsync(m, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            }
+
+            var authorization = token is null ? null : "Bearer " + token.AccessToken;
+            res = await SendOnce(Build(p, uri), authorization, sign: true);
+            if (res.StatusCode == HttpStatusCode.Unauthorized && p.Deferred is { } deferred)
+            {
+                string? answer = null;
+                if (deferred.Type == AuthTypes.Digest && DigestAuth.Challenge(res) is { } challenge)
+                    answer = DigestAuth.Header(challenge, deferred.Username, deferred.Password, p.Method, uri.PathAndQuery);
+                else if (deferred.Type == AuthTypes.OAuth2)
+                    answer = "Bearer " + (await OAuthTokenAsync(deferred, options, true, timeout.Token)).AccessToken; // revoked: one new token, one more try
+                if (answer is not null)
+                {
+                    res.Dispose();
+                    authorization = answer;
+                    res = await SendOnce(Build(p, uri), answer, sign: true);
+                }
+            }
+
+            var current = uri;
+            var method = p.Method;
+            bool withBody = true;
+            double hopStart = 0;
+            while (options.FollowRedirects && IsRedirect(res.StatusCode) && res.Headers.Location is { } location)
+            {
+                if (hops.Count >= MaxRedirects) throw new HttpRequestException(Loc.F("net.tooManyRedirects", MaxRedirects));
+                var next = location.IsAbsoluteUri ? location : new Uri(current, location);
+                hops.Add(new RedirectHop((int)res.StatusCode, current.ToString(), next.ToString(), sw.Elapsed.TotalMilliseconds - hopStart));
+                hopStart = sw.Elapsed.TotalMilliseconds;
+                // What browsers and curl do: 303 (and 301/302 after a POST) go on as GET without a body; 307/308 repeat as is.
+                if (res.StatusCode == HttpStatusCode.SeeOther && method != "HEAD"
+                    || res.StatusCode is HttpStatusCode.MovedPermanently or HttpStatusCode.Found && method == "POST")
+                {
+                    method = "GET";
+                    withBody = false;
+                }
+                res.Dispose();
+                // Credentials stay with the origin they were meant for.
+                bool sameOrigin = next.Scheme == uri.Scheme && next.IdnHost.Equals(uri.IdnHost, StringComparison.OrdinalIgnoreCase) && next.Port == uri.Port;
+                res = await SendOnce(Build(p, next, method, withBody, sameOrigin), sameOrigin ? authorization : null, sign: sameOrigin);
+                current = next;
+            }
             var headers = new List<KeyValuePair<string, string>>();
             foreach (var h in res.Headers) foreach (var v in h.Value) headers.Add(new(h.Key, v));
             foreach (var h in res.Content.Headers) foreach (var v in h.Value) headers.Add(new(h.Key, v));
+            var live = listener is not null && SseParser.IsEventStream(res.Content.Headers.ContentType?.ToString());
+            if (live)
+            {
+                listener!.Started(new ApiResponse
+                {
+                    Status = (int)res.StatusCode, Reason = res.ReasonPhrase ?? res.StatusCode.ToString(), HttpVersion = res.Version.ToString(),
+                    FinalUrl = res.RequestMessage?.RequestUri?.ToString() ?? p.Url, Headers = headers, ElapsedMs = sw.Elapsed.TotalMilliseconds,
+                });
+                timeout.CancelAfter(options.TimeoutMs); // from here on: the time allowed between two chunks
+            }
+            var (body, truncated, interrupted) = await ReadBodyAsync(res, timeout.Token, ct, live ? listener : null, live ? timeout : null, options.TimeoutMs);
+            sw.Stop();
             return new ApiResponse
             {
                 Status = (int)res.StatusCode,
@@ -169,6 +320,7 @@ public sealed class HttpEngine : IDisposable
                 Truncated = truncated,
                 Interrupted = interrupted,
                 ElapsedMs = sw.Elapsed.TotalMilliseconds,
+                Redirects = hops,
             };
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -183,7 +335,16 @@ public sealed class HttpEngine : IDisposable
         {
             return Failure(p, sw, Describe(e));
         }
+        finally
+        {
+            res?.Dispose();
+            foreach (var m in sent) m.Dispose();
+        }
     }
+
+    private const int MaxRedirects = 10;
+
+    private static bool IsRedirect(HttpStatusCode code) => (int)code is 301 or 302 or 303 or 307 or 308;
 
     /// <summary>
     /// Connects to every address of the host at once and keeps the first that answers. "localhost" is ::1 and
@@ -244,19 +405,26 @@ public sealed class HttpEngine : IDisposable
         return inner.Message;
     }
 
-    private static HttpRequestMessage Build(PreparedRequest p, Uri uri)
+    /// <summary>
+    /// The message for <paramref name="uri"/>. A redirect passes the method it goes on with, whether the body goes
+    /// too, and whether it stays on the same origin (if not, the Authorization and Cookie headers stay behind).
+    /// </summary>
+    private static HttpRequestMessage Build(PreparedRequest p, Uri uri, string? method = null, bool withBody = true, bool sameOrigin = true)
     {
-        var msg = new HttpRequestMessage(new HttpMethod(p.Method), uri);
-        HttpContent? content = p.BodyType switch
+        var msg = new HttpRequestMessage(new HttpMethod(method ?? p.Method), uri);
+        HttpContent? content = !withBody ? null : p.BodyType switch
         {
             BodyTypes.Json or BodyTypes.Text or BodyTypes.Xml or BodyTypes.Html => new ByteArrayContent(Encoding.UTF8.GetBytes(p.RawBody)),
             BodyTypes.UrlEncoded => new ByteArrayContent(Encoding.ASCII.GetBytes(FormEncode(p.Fields))),
             BodyTypes.FormData => Multipart(p.Fields),
+            BodyTypes.Binary when p.RawBody.Length > 0 => new ByteArrayContent(File.ReadAllBytes(p.RawBody)),
             _ => null,
         };
         var contentHeaders = new List<KeyValuePair<string, string>>();
         foreach (var (k, v) in p.Headers)
         {
+            if (!sameOrigin && (k.Equals("Authorization", StringComparison.OrdinalIgnoreCase) || k.Equals("Cookie", StringComparison.OrdinalIgnoreCase))) continue;
+            if (!withBody && k.StartsWith("Content-", StringComparison.OrdinalIgnoreCase)) continue;
             if (msg.Headers.TryAddWithoutValidation(k, v)) continue;
             contentHeaders.Add(new(k, v)); // Content-Type, Content-Language… belong to the content
         }
@@ -295,9 +463,17 @@ public sealed class HttpEngine : IDisposable
         return m;
     }
 
-    private static string MimeFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    /// <summary>The Content-Type of a file sent as a body or a form-data part, from its extension.</summary>
+    public static string MimeFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {
         ".json" => "application/json",
+        ".html" or ".htm" => "text/html",
+        ".svg" => "image/svg+xml",
+        ".mp3" => "audio/mpeg",
+        ".mp4" => "video/mp4",
+        ".wav" => "audio/wav",
+        ".gz" => "application/gzip",
+        ".yaml" or ".yml" => "application/yaml",
         ".txt" => "text/plain",
         ".csv" => "text/csv",
         ".xml" => "application/xml",
@@ -314,7 +490,8 @@ public sealed class HttpEngine : IDisposable
     /// The headers have arrived: from here on a timeout, a cancel or a dropped connection keeps the bytes read so far
     /// (marked <see cref="ApiResponse.Interrupted"/>) instead of throwing them away.
     /// </summary>
-    private static async Task<(byte[] Body, bool Truncated, string? Interrupted)> ReadBodyAsync(HttpResponseMessage res, CancellationToken timeout, CancellationToken user)
+    private static async Task<(byte[] Body, bool Truncated, string? Interrupted)> ReadBodyAsync(HttpResponseMessage res, CancellationToken timeout, CancellationToken user,
+        IStreamListener? listener = null, CancellationTokenSource? idle = null, int idleMs = 0)
     {
         using var ms = new MemoryStream();
         try
@@ -330,9 +507,11 @@ public sealed class HttpEngine : IDisposable
                     return (ms.ToArray(), true, null);
                 }
                 ms.Write(buffer, 0, n);
+                idle?.CancelAfter(idleMs);
+                listener?.Data(buffer.AsSpan(0, n).ToArray());
             }
         }
-        catch (OperationCanceledException) { return (ms.ToArray(), false, user.IsCancellationRequested ? "cancelled" : "timeout"); }
+        catch (OperationCanceledException) { return (ms.ToArray(), false, user.IsCancellationRequested ? "cancelled" : idle is not null ? "idle" : "timeout"); }
         catch (Exception e) when (e is IOException or HttpRequestException) { return (ms.ToArray(), false, "connection"); }
         return (ms.ToArray(), false, null);
     }

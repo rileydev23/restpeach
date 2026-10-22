@@ -30,6 +30,7 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
     public ApiEnvironment? CurrentEnvironment { get; private set; }
     public Dictionary<string, string> Runtime { get; } = new(StringComparer.Ordinal);
     public HttpEngine Engine { get; } = new();
+    public Dictionary<string, GraphQLSchema> Schemas { get; } = new(StringComparer.OrdinalIgnoreCase);
     public bool PrettyResponses => _store.State.PrettyResponses;
 
     public ObservableCollection<TreeNode> Tree { get; } = new();
@@ -51,6 +52,8 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
     [ObservableProperty] private string _variablesHeader = "";
     [ObservableProperty] private string _curlPreview = "";
     [ObservableProperty] private string _curlEmptyText = Loc.T("pv.curl.empty");
+    public IReadOnlyList<Choice> CodeLanguages { get; } = CodeGen.Languages.Select(l => new Choice(l.Id, l.Label)).ToList();
+    [ObservableProperty] private Choice _codeLanguage;
     [ObservableProperty] private IReadOnlyList<CookieRow> _jarCookies = Array.Empty<CookieRow>();
     [ObservableProperty] private bool _prettyResponse;
     [ObservableProperty] private bool _hasGit;
@@ -85,6 +88,7 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
     {
         RootPath = path;
         _store = store;
+        _codeLanguage = CodeLanguages.FirstOrDefault(c => c.Value == store.State.CodeLanguage) ?? CodeLanguages[0];
         Settings = settings;
         Title = Path.GetFileName(path.TrimEnd('\\', '/'));
         ToolTip = path;
@@ -387,6 +391,56 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
         SaveSession();
     }
 
+    // ------------------------------------------------------------ history
+
+    private List<RunResult>? _history;
+
+    /// <summary>One file per collection in the app's data folder (outside the project, so never in git).</summary>
+    private string HistoryFile => Path.Combine(_store.DataFolder, "history",
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(RootPath.ToLowerInvariant())))[..16] + ".jsonl");
+
+    public IReadOnlyList<RunResult> HistoryEntries => _history ??= LoadHistory();
+
+    private List<RunResult> LoadHistory()
+    {
+        try { return Core.Storage.History.Load(HistoryFile); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return new List<RunResult>(); }
+    }
+
+    public void AddHistory(RunResult result)
+    {
+        var list = _history ??= LoadHistory();
+        list.Add(result);
+        var secrets = CurrentEnvironment?.Secrets.Values.ToList() ?? new List<string>();
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(HistoryFile)!);
+            if (list.Count > Core.Storage.History.MaxEntries + 50)
+            {
+                // Now and then the file is rewritten with the newest entries only.
+                list.RemoveRange(0, list.Count - Core.Storage.History.MaxEntries);
+                File.WriteAllLines(HistoryFile, list.Select(r => Core.Storage.History.Serialize(r, secrets)));
+            }
+            else File.AppendAllText(HistoryFile, Core.Storage.History.Serialize(result, secrets) + "\n");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        foreach (var tab in Docs.OfType<RunTab>().Where(t => t.IsHistory)) tab.Prepend(result);
+    }
+
+    public void ClearHistory()
+    {
+        _history = new List<RunResult>();
+        try { File.Delete(HistoryFile); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
+    [RelayCommand]
+    private void OpenHistory()
+    {
+        if (_ws is null) return;
+        OpenSingleton<RunTab>(r => r.IsHistory, () => RunTab.History(this, rel => OpenRequest(rel), HistoryEntries, ClearHistory));
+    }
+
     public void RuntimeChanged()
     {
         OnPropertyChanged(nameof(HasRuntime));
@@ -446,7 +500,7 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
         VariablesHeader = CurrentEnvironment is { } env ? Loc.F("pv.variablesIn", env.DisplayName) : Loc.T("pv.variables");
         // A WebSocket has no cURL form: the panel says so instead of showing "curl -X WS".
         bool ws = masked?.Kind == ApiKind.WebSocket;
-        CurlPreview = masked is null || ws ? "" : Curl.Write(masked);
+        CurlPreview = masked is null || ws ? "" : CodeGen.Generate(CodeLanguage.Value, masked);
         CurlEmptyText = Loc.T(ws ? "ws.noCurl" : "pv.curl.empty");
         JarCookies = Engine.AllCookies().Select(c => new CookieRow(c.Name, c.Value, c.Domain + c.Path)).ToList();
         OnPropertyChanged(nameof(HasCookies));
@@ -471,6 +525,9 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
         AuthTypes.Bearer => "Bearer Token",
         AuthTypes.Basic => "Basic Auth",
         AuthTypes.ApiKey => "API Key",
+        AuthTypes.Digest => "Digest Auth",
+        AuthTypes.AwsSigV4 => "AWS Signature V4",
+        AuthTypes.OAuth2 => "OAuth 2.0",
         _ => Loc.T("auth.none"),
     };
 
@@ -500,7 +557,14 @@ public partial class ProjectViewModel : TabViewModel, ICollectionHost, IDisposab
     [RelayCommand]
     private async Task CopyCurlPreviewAsync()
     {
-        if (SelectedRequest is { } r) await r.CopyCurlCommand.ExecuteAsync(null);
+        if (SelectedRequest is { } r) await r.CopyCodeAsync(CodeLanguage);
+    }
+
+    partial void OnCodeLanguageChanged(Choice value)
+    {
+        _store.State.CodeLanguage = value.Value;
+        _store.Save();
+        RefreshPanel();
     }
 
     // ------------------------------------------------------------ requests and folders

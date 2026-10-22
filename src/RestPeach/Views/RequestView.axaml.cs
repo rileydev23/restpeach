@@ -32,6 +32,7 @@ public partial class RequestView : UserControl
         Configure(VariablesEditor, readOnly: false);
         Configure(MessageEditor, readOnly: true);
         SearchPanel.Install(BodyEditor);
+        GraphQLCompletion.Attach(BodyEditor, () => _tab);
         SearchPanel.Install(MessageEditor);
         SavedList.DoubleTapped += (_, _) => { if (_tab is { } t) _ = t.SendSavedAsync(t.SelectedSavedMessage); };
         SearchPanel.Install(VariablesEditor);

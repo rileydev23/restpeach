@@ -9,8 +9,9 @@
     <Border DockPanel.Dock="Top" Background="#26272b" BorderBrush="#3a3c42" BorderThickness="0,0,0,1" Padding="10,6">
       <DockPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
-          <CheckBox Content="{l:L run.bail}" IsChecked="{Binding Bail}" ToolTip.Tip="{l:L run.bail.tip}" Margin="0,0,8,0" />
-          <Button Classes="accent" Content="{l:L run.again}" Command="{Binding RunCommand}" IsVisible="{Binding !IsRunning}" ToolTip.Tip="Ctrl+Enter" />
+          <Button Content="{l:L hist.clear}" Command="{Binding ClearHistoryCommand}" IsVisible="{Binding IsHistory}" ToolTip.Tip="{l:L hist.clear.tip}" />
+          <CheckBox Content="{l:L run.bail}" IsChecked="{Binding Bail}" ToolTip.Tip="{l:L run.bail.tip}" Margin="0,0,8,0" IsVisible="{Binding IsRun}" />
+          <Button Classes="accent" Content="{l:L run.again}" Command="{Binding RunCommand}" IsVisible="{Binding IsRun}" ToolTip.Tip="Ctrl+Enter" />
           <Button Content="{l:L run.stop}" Command="{Binding StopCommand}" IsVisible="{Binding IsRunning}" />
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" ClipToBounds="True" Margin="0,0,12,0">
@@ -20,7 +21,7 @@
         </StackPanel>
       </DockPanel>
     </Border>
-    <Border DockPanel.Dock="Bottom" Background="#222327" BorderBrush="#3a3c42" BorderThickness="0,1,0,0" Padding="10,5">
+    <Border DockPanel.Dock="Bottom" Background="#222327" BorderBrush="#3a3c42" BorderThickness="0,1,0,0" Padding="10,5" IsVisible="{Binding IsRun}">
       <DockPanel>
         <Button DockPanel.Dock="Right" Classes="flat" Content="{l:L pv.copy}" Command="{Binding CopyCliCommand}" Foreground="#8a8d93" FontSize="11" />
         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -40,13 +41,14 @@
         <ListBox x:Name="Results" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:RunRow">
-              <Grid ColumnDefinitions="24,42,*,Auto,Auto,Auto" Margin="10,4">
-                <TextBlock Text="{Binding Glyph}" Foreground="{Binding GlyphBrush}" FontWeight="Bold" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Classes="method" Text="{Binding Method}" Foreground="{Binding MethodBrush}" />
-                <TextBlock Grid.Column="2" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding RelPath}" />
-                <TextBlock Grid.Column="3" Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" MinWidth="120" Margin="10,0" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="4" Text="{Binding Time}" Classes="dim" MinWidth="70" TextAlignment="Right" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="5" Text="{Binding Checks}" Classes="dim" MinWidth="50" TextAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{l:L run.checks.tip}" />
+              <Grid ColumnDefinitions="Auto,24,42,*,Auto,Auto,Auto" Margin="10,4">
+                <TextBlock Text="{Binding When}" Classes="dim mono" FontSize="11" Margin="0,0,10,0" VerticalAlignment="Center" IsVisible="{Binding ShowWhen}" />
+                <TextBlock Grid.Column="1" Text="{Binding Glyph}" Foreground="{Binding GlyphBrush}" FontWeight="Bold" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Classes="method" Text="{Binding Method}" Foreground="{Binding MethodBrush}" />
+                <TextBlock Grid.Column="3" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding RelPath}" />
+                <TextBlock Grid.Column="4" Text="{Binding Status}" Foreground="{Binding StatusBrush}" FontWeight="SemiBold" MinWidth="120" Margin="10,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="5" Text="{Binding Time}" Classes="dim" MinWidth="70" TextAlignment="Right" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="6" Text="{Binding Checks}" Classes="dim" MinWidth="50" TextAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{l:L run.checks.tip}" />
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>

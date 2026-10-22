@@ -27,8 +27,27 @@ public static class AuthTypes
     public const string Bearer = "bearer";
     public const string Basic = "basic";
     public const string ApiKey = "apikey";
+    /// <summary>HTTP Digest: the first try gets a 401 with a challenge, the answer to it goes in the second.</summary>
+    public const string Digest = "digest";
+    /// <summary>AWS Signature Version 4: every request is signed with the access key.</summary>
+    public const string AwsSigV4 = "awsv4";
+    /// <summary>OAuth 2.0: a token is asked for (and renewed) with the grant, then sent as Bearer.</summary>
+    public const string OAuth2 = "oauth2";
 
-    public static readonly string[] All = { Inherit, None, Bearer, Basic, ApiKey };
+    public static readonly string[] All = { Inherit, None, Bearer, Basic, ApiKey, Digest, AwsSigV4, OAuth2 };
+
+    /// <summary>Types the engine applies itself when sending (a challenge, a signature, a token to fetch).</summary>
+    public static bool IsDeferred(string type) => type is Digest or AwsSigV4 or OAuth2;
+}
+
+public static class OAuthGrants
+{
+    public const string ClientCredentials = "client_credentials";
+    public const string Password = "password";
+    /// <summary>With PKCE: the browser opens the login page and a local listener gets the code back.</summary>
+    public const string AuthorizationCode = "authorization_code";
+
+    public static readonly string[] All = { ClientCredentials, Password, AuthorizationCode };
 }
 
 /// <summary>How a request (or a folder, for its children) authenticates.</summary>
@@ -43,6 +62,25 @@ public sealed class AuthSpec
     public string Value { get; set; } = "";
     /// <summary>API key: "header" (default) or "query".</summary>
     public string In { get; set; } = "header";
+
+    // AWS Signature V4
+    public string AccessKey { get; set; } = "";
+    public string SecretKey { get; set; } = "";
+    public string Region { get; set; } = "";
+    public string Service { get; set; } = "";
+    public string SessionToken { get; set; } = "";
+
+    // OAuth 2.0 (the password grant also uses Username / Password)
+    public string Grant { get; set; } = OAuthGrants.ClientCredentials;
+    public string TokenUrl { get; set; } = "";
+    public string AuthUrl { get; set; } = "";
+    public string ClientId { get; set; } = "";
+    public string ClientSecret { get; set; } = "";
+    public string Scope { get; set; } = "";
+    /// <summary>Authorization code: where the browser comes back; empty = a free port on 127.0.0.1.</summary>
+    public string RedirectUri { get; set; } = "";
+    /// <summary>"basic" (client id and secret in an Authorization header, the default) or "body".</summary>
+    public string ClientAuth { get; set; } = "basic";
 
     public bool IsInherit => Type == AuthTypes.Inherit;
     public AuthSpec Clone() => (AuthSpec)MemberwiseClone();
@@ -62,8 +100,10 @@ public static class BodyTypes
     public const string UrlEncoded = "urlencoded";
     /// <summary>A GraphQL operation: <see cref="BodySpec.Data"/> is the query, <see cref="BodySpec.Variables"/> its variables (JSON).</summary>
     public const string GraphQL = "graphql";
+    /// <summary>A file sent as is: <see cref="BodySpec.Data"/> is its path (relative to the collection, may hold <c>{{placeholders}}</c>).</summary>
+    public const string Binary = "binary";
 
-    public static readonly string[] All = { None, Json, Text, Xml, Html, FormData, UrlEncoded, GraphQL };
+    public static readonly string[] All = { None, Json, Text, Xml, Html, FormData, UrlEncoded, GraphQL, Binary };
 
     /// <summary>Bodies sent as the text of <see cref="BodySpec.Data"/> as is (GraphQL is wrapped in JSON first).</summary>
     public static bool IsRaw(string type) => type is Json or Text or Xml or Html;
@@ -85,7 +125,7 @@ public static class BodyTypes
 public sealed class BodySpec
 {
     public string Type { get; set; } = BodyTypes.None;
-    /// <summary>Raw bodies (json, text, xml, html); the query of a GraphQL body.</summary>
+    /// <summary>Raw bodies (json, text, xml, html); the query of a GraphQL body; the file path of a binary body.</summary>
     public string Data { get; set; } = "";
     /// <summary>GraphQL only: the variables, as JSON text (may hold <c>{{placeholders}}</c>).</summary>
     public string Variables { get; set; } = "";

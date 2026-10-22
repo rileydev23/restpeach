@@ -15,9 +15,31 @@ public sealed class WorkspaceConfig
     public int TimeoutMs { get; set; } = 30000;
     public bool FollowRedirects { get; set; } = true;
     public bool VerifyTls { get; set; } = true;
+    /// <summary>"" (automatic: HTTP/1.1, or what the server offers), "1.1", "2" or "3".</summary>
+    public string HttpVersion { get; set; } = "";
+    /// <summary>"" (the system's, and HTTP(S)_PROXY), "none", or a URL such as <c>http://user:pass@proxy:8080</c>; may hold <c>{{variables}}</c>.</summary>
+    public string Proxy { get; set; } = "";
+    public ClientCertSpec ClientCert { get; set; } = new();
     /// <summary>Order of the items at the top of the collection (see <see cref="FolderConfig.Order"/>).</summary>
     public List<string> Order { get; set; } = new();
     public JsonObject Extra { get; set; } = new();
+}
+
+/// <summary>
+/// A client certificate for mutual TLS: a .pfx/.p12, or a PEM certificate with its key. Paths are relative to the
+/// collection; every field may hold <c>{{variables}}</c>, so the password can live in the environment's secrets.
+/// </summary>
+public sealed class ClientCertSpec
+{
+    public string Path { get; set; } = "";
+    /// <summary>PEM only: the private key file (empty when it is in the same file as the certificate).</summary>
+    public string Key { get; set; } = "";
+    public string Password { get; set; } = "";
+    /// <summary>Only offered to this host (and its subdomains); empty = to every server that asks for one.</summary>
+    public string Host { get; set; } = "";
+
+    public bool IsEmpty => Path.Trim().Length == 0;
+    public ClientCertSpec Clone() => (ClientCertSpec)MemberwiseClone();
 }
 
 /// <summary><c>folder.json</c> inside a folder of requests: auth and variables for everything below it.</summary>

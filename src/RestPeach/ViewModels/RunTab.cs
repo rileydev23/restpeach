@@ -19,6 +19,11 @@ public sealed class RunRow
     public required RunResult Result { get; init; }
     /// <summary>Secret values of the environment: the detail shows them as •••• (copying as cURL keeps them).</summary>
     public IReadOnlyList<string> Secrets { get; init; } = Array.Empty<string>();
+    /// <summary>History rows say when they were sent.</summary>
+    public bool ShowWhen { get; init; }
+    public string When => Result.Response is { } r && r.At != DateTimeOffset.MinValue
+        ? (r.At.Date == DateTimeOffset.Now.Date ? r.At.ToString("HH:mm:ss") : r.At.ToString("dd/MM HH:mm"))
+        : "";
     public string RelPath => Result.RelPath;
     public string Name => Workspace.Join(Workspace.ParentOf(RelPath), Result.Name);
     public string Glyph => Result.Passed ? "✓" : "✗";
@@ -75,6 +80,7 @@ public sealed class RunRow
         BodyTypes.None => "",
         BodyTypes.UrlEncoded => HttpEngine.FormEncode(p.Fields),
         BodyTypes.FormData => string.Join('\n', p.Fields.Select(f => f.Key + ": " + (f.IsFile ? "@" + f.Value : f.Value))),
+        BodyTypes.Binary => p.RawBody.Length > 0 ? "@" + p.RawBody : "",
         _ => p.RawBody,
     });
 
@@ -153,6 +159,10 @@ public sealed partial class RunTab : TabViewModel
 
     public string RelDir { get; }
     public ObservableCollection<RunRow> Rows { get; } = new();
+    /// <summary>The tab lists the history of sent requests (newest first) instead of running a folder.</summary>
+    public bool IsHistory { get; private init; }
+    public bool IsRun => !IsHistory;
+    private Action? _clearHistory;
 
     [ObservableProperty] private bool _isRunning;
     [ObservableProperty] private string _summary = "";
@@ -182,7 +192,7 @@ public sealed partial class RunTab : TabViewModel
     public bool IsHeadersDetail => Detail == "headers";
     public bool IsSentDetail => Detail == "sent";
 
-    public string Heading => RelDir.Length == 0 ? Loc.T("run.collection") : Loc.F("run.folder", RelDir);
+    public string Heading => IsHistory ? Loc.T("hist.heading") : RelDir.Length == 0 ? Loc.T("run.collection") : Loc.F("run.folder", RelDir);
     public string CliHint => "restpeach-cli run " + (RelDir.Length == 0 ? "." : ".api/" + RelDir) + (_host.CurrentEnvironment is { } e ? " --env " + e.Stem : "");
 
     public RunTab(ICollectionHost host, string relDir, Action<string> open)
@@ -196,10 +206,42 @@ public sealed partial class RunTab : TabViewModel
         ToolTip = Heading;
     }
 
+    public static RunTab History(ICollectionHost host, Action<string> open, IEnumerable<RunResult> entries, Action clear)
+    {
+        var tab = new RunTab(host, "", open) { IsHistory = true, _clearHistory = clear, Badge = "HIS", BadgeBrush = Palette.Dim, Title = Loc.T("hist.tab") };
+        tab.ToolTip = tab.Heading;
+        foreach (var r in entries.Reverse()) tab.Rows.Add(new RunRow { Result = r, ShowWhen = true });
+        tab.UpdateHistorySummary();
+        tab.Selected = tab.Rows.FirstOrDefault();
+        return tab;
+    }
+
+    /// <summary>A request just sent: on top of the history.</summary>
+    public void Prepend(RunResult r)
+    {
+        Rows.Insert(0, new RunRow { Result = r, ShowWhen = true });
+        UpdateHistorySummary();
+    }
+
+    private void UpdateHistorySummary()
+    {
+        Summary = Rows.Count == 0 ? Loc.T("hist.empty") : Loc.Plural("cli.requests", Rows.Count);
+        SummaryBrush = Palette.Dim;
+    }
+
+    [RelayCommand]
+    private void ClearHistory()
+    {
+        _clearHistory?.Invoke();
+        Rows.Clear();
+        Selected = null;
+        UpdateHistorySummary();
+    }
+
     [RelayCommand]
     public async Task RunAsync()
     {
-        if (IsRunning) return;
+        if (IsRunning || IsHistory) return;
         Rows.Clear();
         Selected = null;
         var requests = _host.Ws.ListRequests(RelDir);

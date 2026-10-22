@@ -22,6 +22,8 @@ public static class ProtocolInsight
     {
         var list = new List<Insight>();
         if (r.Error is not null) return list;
+        foreach (var hop in r.Redirects)
+            list.Add(new Insight(Loc.F("insight.redirect", hop.Status, hop.To, ResponseFormatter.Duration(hop.ElapsedMs)), InsightLevel.Info));
         try
         {
             var ct = (r.ContentType ?? "").ToLowerInvariant();
@@ -194,17 +196,9 @@ public static class ProtocolInsight
     /// <summary>Server-Sent Events: blocks separated by a blank line, with "event:" and "data:" fields.</summary>
     private static Insight Sse(string text)
     {
-        var types = new List<string>();
-        int events = 0;
-        foreach (var block in text.Replace("\r\n", "\n").Split("\n\n"))
-        {
-            var lines = block.Split('\n');
-            if (!lines.Any(l => l.StartsWith("data", StringComparison.Ordinal))) continue;
-            events++;
-            var type = lines.FirstOrDefault(l => l.StartsWith("event:", StringComparison.Ordinal))?[6..].Trim() ?? "message";
-            if (!types.Contains(type)) types.Add(type);
-        }
-        return new Insight(Loc.Plural("insight.sse", events) + (types.Count > 0 ? " · " + string.Join(", ", types.Take(6)) : ""), InsightLevel.Info);
+        var events = SseParser.Parse(text);
+        var types = events.Select(e => e.Event).Distinct().Take(6).ToList();
+        return new Insight(Loc.Plural("insight.sse", events.Count) + (types.Count > 0 ? " · " + string.Join(", ", types) : ""), InsightLevel.Info);
     }
 
     private static Insight Ndjson(string text)

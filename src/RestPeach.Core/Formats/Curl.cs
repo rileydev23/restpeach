@@ -38,12 +38,14 @@ public static class Curl
         var data = new List<string>();
         var form = new List<KeyValue>();
         bool get = false, head = false, json = false;
-        string? user = null;
+        string? user = null, binaryFile = null, awsSigV4 = null;
+        bool digest = false;
 
         for (int i = 1; i < args.Count; i++)
         {
             var a = args[i];
             string Next() => i + 1 < args.Count ? args[++i] : "";
+            string? Peek() => i + 1 < args.Count ? args[i + 1] : null;
 
             // "-XPOST", "-sSL", "-Hfoo: bar"
             if (a.Length > 2 && a[0] == '-' && a[1] != '-')
@@ -83,6 +85,9 @@ public static class Curl
                     if (colon > 0) headers.Add(KeyValue.Of(h[..colon].Trim(), h[(colon + 1)..].Trim()));
                     else if (h.EndsWith(';')) headers.Add(KeyValue.Of(h.TrimEnd(';').Trim(), ""));
                     break;
+                case "--data-binary" when Peek() is { } fileArg && fileArg.StartsWith('@') && fileArg.Length > 1:
+                    binaryFile = Next()[1..];
+                    break;
                 case "-d" or "--data" or "--data-ascii" or "--data-raw" or "--data-binary": data.Add(Next()); break;
                 case "--data-urlencode":
                     var du = Next();
@@ -100,6 +105,8 @@ public static class Curl
                     form.Add(new KeyValue { Key = f[..feq], Value = fv.Trim('"'), Type = isFile ? "file" : null });
                     break;
                 case "-u" or "--user": user = Next(); break;
+                case "--digest": digest = true; break;
+                case "--aws-sigv4": awsSigV4 = Next(); break;
                 case "-A" or "--user-agent": headers.Add(KeyValue.Of("User-Agent", Next())); break;
                 case "-e" or "--referer": headers.Add(KeyValue.Of("Referer", Next())); break;
                 case "-b" or "--cookie":
@@ -142,7 +149,20 @@ public static class Curl
         if (user is not null)
         {
             var c = user.IndexOf(':');
-            r.Auth = new AuthSpec { Type = AuthTypes.Basic, Username = c < 0 ? user : user[..c], Password = c < 0 ? "" : user[(c + 1)..] };
+            string name = c < 0 ? user : user[..c], secret = c < 0 ? "" : user[(c + 1)..];
+            if (awsSigV4 is not null)
+            {
+                // "aws:amz:us-east-1:execute-api"
+                var provider = awsSigV4.Split(':');
+                r.Auth = new AuthSpec
+                {
+                    Type = AuthTypes.AwsSigV4, AccessKey = name, SecretKey = secret,
+                    Region = provider.Length > 2 ? provider[2] : "", Service = provider.Length > 3 ? provider[3] : "",
+                };
+                var token = headers.FirstOrDefault(x => x.Key.Equals("X-Amz-Security-Token", StringComparison.OrdinalIgnoreCase));
+                if (token is not null) { r.Auth.SessionToken = token.Value; headers.Remove(token); }
+            }
+            else r.Auth = new AuthSpec { Type = digest ? AuthTypes.Digest : AuthTypes.Basic, Username = name, Password = secret };
         }
         if (r.Auth.IsInherit) r.Auth = AuthSpec.None();
 
@@ -150,6 +170,10 @@ public static class Curl
         if (form.Count > 0)
         {
             r.Body = new BodySpec { Type = BodyTypes.FormData, Fields = form };
+        }
+        else if (binaryFile is not null)
+        {
+            r.Body = new BodySpec { Type = BodyTypes.Binary, Data = binaryFile };
         }
         else if (data.Count > 0)
         {
@@ -329,6 +353,20 @@ public static class Curl
         else if (p.Method != "GET" && !(p.Method == "POST" && HasBody(p))) first += " -X " + p.Method;
         parts.Add(first + " " + q(p.Url));
         if (basicUser is not null) parts.Add("-u " + q(basicUser));
+        switch (p.Deferred?.Type)
+        {
+            case AuthTypes.Digest:
+                parts.Add("--digest -u " + q(p.Deferred.Username + ":" + p.Deferred.Password));
+                break;
+            case AuthTypes.AwsSigV4:
+                parts.Add("--aws-sigv4 " + q($"aws:amz:{p.Deferred.Region}:{p.Deferred.Service}") + " -u " + q(p.Deferred.AccessKey + ":" + p.Deferred.SecretKey));
+                if (p.Deferred.SessionToken.Length > 0) parts.Add("-H " + q("X-Amz-Security-Token: " + p.Deferred.SessionToken));
+                break;
+            case AuthTypes.OAuth2:
+                // The token is asked for when sending; cURL cannot do that by itself.
+                parts.Add("-H " + q("Authorization: Bearer <oauth2-token>"));
+                break;
+        }
         foreach (var (k, v) in p.Headers)
         {
             if (p.BodyType == BodyTypes.FormData && k.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)) continue;
@@ -341,6 +379,9 @@ public static class Curl
                 break;
             case BodyTypes.UrlEncoded:
                 if (p.Fields.Count > 0) parts.Add("--data-raw " + q(HttpEngine.FormEncode(p.Fields)));
+                break;
+            case BodyTypes.Binary:
+                if (p.RawBody.Length > 0) parts.Add("--data-binary " + q("@" + p.RawBody));
                 break;
             default:
                 if (BodyTypes.IsRaw(p.BodyType) && p.RawBody.Length > 0) parts.Add("--data-raw " + q(p.RawBody));
@@ -377,7 +418,7 @@ public static class Curl
     }
 
     private static bool HasBody(PreparedRequest p) =>
-        (BodyTypes.IsRaw(p.BodyType) && p.RawBody.Length > 0) || (BodyTypes.IsForm(p.BodyType) && p.Fields.Count > 0);
+        (BodyTypes.IsRaw(p.BodyType) || p.BodyType == BodyTypes.Binary) && p.RawBody.Length > 0 || (BodyTypes.IsForm(p.BodyType) && p.Fields.Count > 0);
 
     /// <summary>Single quotes for bash: nothing inside is special except the quote itself.</summary>
     public static string Quote(string s) =>

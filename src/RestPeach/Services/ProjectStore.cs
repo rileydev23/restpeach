@@ -56,6 +56,8 @@ public sealed class AppState
     public bool WordWrap { get; set; }
     /// <summary>Re-indent JSON/XML responses (off = show the raw body).</summary>
     public bool PrettyResponses { get; set; } = true;
+    /// <summary>The language of the code panel ("curl", "python"…).</summary>
+    public string? CodeLanguage { get; set; }
     /// <summary>Interface language: "en", "es" or null to follow Windows.</summary>
     public string? Language { get; set; }
 }
