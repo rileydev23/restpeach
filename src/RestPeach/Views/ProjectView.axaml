@@ -256,7 +256,7 @@
               </Border>
               <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="10,0,10,6">
                 <Panel>
-                  <SelectableTextBlock Text="{Binding CurlPreview}" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="11" Foreground="#c8c8c8"
+                  <SelectableTextBlock Text="{Binding CurlPreview}" FontFamily="Cascadia Mono, Consolas, Courier New, DejaVu Sans Mono, Liberation Mono" FontSize="11" Foreground="#c8c8c8"
                                        SelectionBrush="#33507a" IsVisible="{Binding HasCurl}" />
                   <TextBlock Classes="dim" FontSize="12" Text="{Binding CurlEmptyText}" IsVisible="{Binding !HasCurl}" TextWrapping="Wrap" />
                 </Panel>

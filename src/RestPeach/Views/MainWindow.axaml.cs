@@ -17,6 +17,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // X11 can't draw into the window frame: keep the system title bar there instead of showing two.
+        if (OperatingSystem.IsLinux())
+        {
+            ExtendClientAreaToDecorationsHint = false;
+            TitleBar.IsVisible = false;
+        }
         TitleBar.PointerPressed += OnTitleBarPressed;
         MinButton.Click += (_, _) => WindowState = WindowState.Minimized;
         MaxButton.Click += (_, _) => ToggleMaximized();

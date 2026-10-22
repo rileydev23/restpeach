@@ -106,6 +106,9 @@ public partial class App : Application
                 else if (action == "home") vm.ShowHomeCommand.Execute(null);
                 else if (action.StartsWith("open:") && p is not null) { p.Reveal(action[5..]); p.OpenRequest(action[5..]); }
                 else if (action == "send" && p?.SelectedRequest is { } r) await r.SendCommand.ExecuteAsync(null);
+                else if (action.StartsWith("saved:") && p?.SelectedRequest is { } r4) await r4.SendSavedAsync(r4.SavedMessages.ElementAtOrDefault(int.Parse(action[6..])));
+                else if (action.StartsWith("wsrow:") && p?.SelectedRequest is { } r5) r5.SelectedWsRow = r5.WsLog.ElementAtOrDefault(int.Parse(action[6..]));
+                else if (action == "history" && p is not null) p.OpenHistoryCommand.Execute(null);
                 else if (action.StartsWith("section:") && p?.SelectedRequest is { } r2) r2.Section = action[8..];
                 else if (action.StartsWith("response:") && p?.SelectedRequest is { } r3) r3.ResponseSection = action[9..];
                 else if (action == "run" && p is not null) await p.RunCollectionCommand.ExecuteAsync(null);

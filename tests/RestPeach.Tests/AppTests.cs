@@ -39,18 +39,23 @@ public class AppTests
     [Fact]
     public void Sibling_apps_are_looked_for_in_the_usual_places()
     {
-        var c = PeachLocator.Candidates("GitPeach", @"C:\Tools\RestPeach", @"C:\Users\a\AppData\Local", @"C:\Program Files", @"C:\bin;""C:\x y""").ToList();
+        // Native paths and the platform's executable name, so the test also holds on Linux.
+        var root = Path.Combine(Path.GetTempPath(), "peach");
+        string Exe(string app) => OperatingSystem.IsWindows() ? app + ".exe" : app;
+        string P(params string[] parts) => Path.Combine([root, .. parts]);
+        var c = PeachLocator.Candidates("GitPeach", P("Tools", "RestPeach"), P("Local"), P("Program Files"),
+            P("bin") + Path.PathSeparator + "\"" + P("x y") + "\"").ToList();
         Assert.Equal(new[]
         {
-            @"C:\Tools\RestPeach\GitPeach.exe",
-            @"C:\Tools\GitPeach\GitPeach.exe",
-            @"C:\Users\a\AppData\Local\Programs\GitPeach\GitPeach.exe",
-            @"C:\Program Files\GitPeach\GitPeach.exe",
-            @"C:\bin\GitPeach.exe",
-            @"C:\x y\GitPeach.exe",
+            P("Tools", "RestPeach", Exe("GitPeach")),
+            P("Tools", "GitPeach", Exe("GitPeach")),
+            P("Local", "Programs", "GitPeach", Exe("GitPeach")),
+            P("Program Files", "GitPeach", Exe("GitPeach")),
+            P("bin", Exe("GitPeach")),
+            P("x y", Exe("GitPeach")),
         }, c);
-        Assert.Equal(@"C:\Tools\TextPeach\TextPeach.exe",
-            PeachLocator.Find("TextPeach", p => p.StartsWith(@"C:\Tools\TextPeach"), @"C:\Tools\RestPeach", null, null, null));
+        Assert.Equal(P("Tools", "TextPeach", Exe("TextPeach")),
+            PeachLocator.Find("TextPeach", p => p.StartsWith(P("Tools", "TextPeach")), P("Tools", "RestPeach"), null, null, null));
         Assert.Equal("https://github.com/rileydev23/textpeach", PeachLocator.RepoUrl("TextPeach"));
     }
 

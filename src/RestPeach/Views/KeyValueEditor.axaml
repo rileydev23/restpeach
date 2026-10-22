@@ -15,7 +15,7 @@
                    IsVisible="{Binding !HasSuggestions}" />
           <AutoCompleteBox Grid.Column="1" Classes="cell" Text="{Binding Key, Mode=TwoWay}" ItemsSource="{Binding Suggestions}"
                            FilterMode="StartsWith" Watermark="{Binding KeyWatermark}" IsVisible="{Binding HasSuggestions}"
-                           MinimumPrefixLength="1" FontFamily="Cascadia Mono, Consolas, Courier New" />
+                           MinimumPrefixLength="1" FontFamily="Cascadia Mono, Consolas, Courier New, DejaVu Sans Mono, Liberation Mono" />
           <TextBox Grid.Column="3" Classes="cell mono" Text="{Binding Value}" Watermark="{Binding ValueWatermark}"
                    PasswordChar="{Binding PasswordChar}" />
           <StackPanel Grid.Column="4" Orientation="Horizontal" IsVisible="{Binding ShowType}" Margin="4,0,0,0">
